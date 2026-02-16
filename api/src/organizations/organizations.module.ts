@@ -10,6 +10,7 @@ import { OrganizationBrandingService } from './organization-branding.service';
 import { Organization } from '../database/entities/organizations.entity';
 import { OrganizationMember } from '../database/entities/organization_members.entity';
 import { OrganizationDocument } from '../database/entities/organization_documents.entity';
+import { OrganizationApp } from '../database/entities/organization_apps.entity';
 import { User } from '../database/entities/users.entity';
 import { Package } from '../database/entities/packages.entity';
 import { Role } from '../database/entities/roles.entity';
@@ -24,6 +25,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
       Organization,
       OrganizationMember,
       OrganizationDocument,
+      OrganizationApp,
       User,
       Package,
       Role,
@@ -47,4 +49,4 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
   providers: [OrganizationsService, DocumentsService, OrganizationBrandingService],
   exports: [OrganizationsService, DocumentsService, OrganizationBrandingService],
 })
-export class OrganizationsModule {}
+export class OrganizationsModule { }

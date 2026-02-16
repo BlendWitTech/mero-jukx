@@ -139,7 +139,7 @@ export class OrganizationsController {
     );
   }
 
-  @Post('branches')
+  @Post('me/branches')
   @Permissions('organizations.edit')
   @ApiOperation({ summary: 'Create a new branch/outlet' })
   @ApiResponse({ status: 201, description: 'Branch created successfully' })
@@ -147,7 +147,7 @@ export class OrganizationsController {
     return this.organizationsService.createBranch(user.userId, user.organizationId, dto);
   }
 
-  @Get('branches')
+  @Get('me/branches')
   @Permissions('organizations.view')
   @ApiOperation({ summary: 'List branches of current organization' })
   @ApiResponse({ status: 200, description: 'Branches retrieved successfully' })
