@@ -31,12 +31,14 @@ interface TicketKanbanProps {
     columns: BoardColumn[];
     onTicketMove: (ticketId: string, targetColumnId: string, newPosition: number) => void;
     onTicketClick: (ticketId: string) => void;
+    onAddTaskClick?: (columnId: string) => void;
 }
 
 export default function TicketKanban({
     columns,
     onTicketMove,
     onTicketClick,
+    onAddTaskClick,
 }: TicketKanbanProps) {
     const { theme } = useTheme();
     const [draggedTicket, setDraggedTicket] = useState<string | null>(null);
@@ -46,6 +48,20 @@ export default function TicketKanban({
         setDraggedTicket(ticketId);
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', ticketId);
+
+        // Add a class for visual feedback
+        const target = e.currentTarget as HTMLElement;
+        target.classList.add('opacity-50', 'scale-95');
+
+        // Custom drag image if desired, but default is usually okay with ghost
+    };
+
+    const handleDragEnd = (e: React.DragEvent) => {
+        setDraggedTicket(null);
+        setDragOverColumn(null);
+
+        const target = e.currentTarget as HTMLElement;
+        target.classList.remove('opacity-50', 'scale-95');
     };
 
     const handleDragOver = (e: React.DragEvent, columnId: string) => {
@@ -58,15 +74,20 @@ export default function TicketKanban({
         e.preventDefault();
         const ticketId = e.dataTransfer.getData('text/plain');
 
-        if (ticketId && draggedTicket) {
-            // Calculate new position - for now just append
-            const column = columns.find(c => c.id === targetColumnId);
-            const newPosition = column?.tickets.length || 0;
+        if (ticketId) {
+            // Find current column of the ticket
+            let sourceColumnId: string | undefined;
+            for (const col of columns) {
+                if (col.tickets.some(t => t.id === ticketId)) {
+                    sourceColumnId = col.id;
+                    break;
+                }
+            }
 
-            // Only trigger move if column changed (reordering within column not implemented yet for simplicity)
-            // Check if ticket is already in this column
-            const sourceColumn = columns.find(c => c.tickets.some(t => t.id === ticketId));
-            if (sourceColumn?.id !== targetColumnId) {
+            // Only trigger move if column changed
+            if (sourceColumnId !== targetColumnId) {
+                const column = columns.find(c => c.id === targetColumnId);
+                const newPosition = column?.tickets.length || 0;
                 onTicketMove(ticketId, targetColumnId, newPosition);
             }
         }
@@ -76,17 +97,19 @@ export default function TicketKanban({
     };
 
     return (
-        <div className="flex gap-4 h-full pb-4" style={{ minHeight: '600px' }}>
+        <div className="flex gap-4 h-full pb-4 min-h-[600px]">
             {columns.map((column) => {
                 const isDragOver = dragOverColumn === column.id;
 
                 return (
                     <div
                         key={column.id}
-                        className="flex-1 min-w-[280px] w-[280px] max-w-[320px] flex flex-col rounded-lg transition-colors"
+                        className={`flex-1 min-w-[300px] w-[300px] max-w-[350px] flex flex-col rounded-xl transition-all duration-200 ${isDragOver ? 'ring-2 ring-primary ring-opacity-50' : ''
+                            }`}
                         style={{
                             backgroundColor: theme.colors.surface, // Column bg
-                            border: `1px solid ${isDragOver ? theme.colors.primary : 'transparent'}`,
+                            border: `1px solid ${theme.colors.border}`,
+                            boxShadow: isDragOver ? `0 0 20px ${theme.colors.primary}1A` : 'none'
                         }}
                         onDragOver={(e) => handleDragOver(e, column.id)}
                         onDragLeave={() => setDragOverColumn(null)}
@@ -94,73 +117,99 @@ export default function TicketKanban({
                     >
                         {/* Column Header */}
                         <div
-                            className="px-3 py-3 flex items-center justify-between border-b"
+                            className="px-4 py-4 flex items-center justify-between border-b"
                             style={{
-                                borderColor: theme.colors.border,
-                                borderTop: `3px solid ${column.color || theme.colors.primary}`
+                                borderColor: `${theme.colors.border}80`,
+                                borderTop: `4px solid ${column.color || theme.colors.primary}`
                             }}
                         >
-                            <div className="flex items-center gap-2">
-                                <h3 className="font-semibold text-sm" style={{ color: theme.colors.text }}>
+                            <div className="flex items-center gap-3">
+                                <h3 className="font-bold text-sm" style={{ color: theme.colors.text }}>
                                     {column.name}
                                 </h3>
-                                <Badge variant="default" size="sm" className="bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400">
+                                <div
+                                    className="px-2 py-0.5 rounded-full text-[10px] font-black"
+                                    style={{
+                                        backgroundColor: `${column.color || theme.colors.primary}15`,
+                                        color: column.color || theme.colors.primary
+                                    }}
+                                >
                                     {column.tickets?.length || 0}
-                                </Badge>
+                                </div>
                             </div>
                             <div className="flex gap-1">
-                                <button className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-500">
+                                <button
+                                    className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                    onClick={() => onAddTaskClick?.(column.id)}
+                                >
                                     <Plus className="h-4 w-4" />
                                 </button>
-                                <button className="p-1 hover:bg-gray-100 dark:hover:bg-gray-800 rounded text-gray-500">
+                                <button className="p-1.5 hover:bg-black/5 dark:hover:bg-white/5 rounded-lg transition-colors text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
                                     <MoreHorizontal className="h-4 w-4" />
                                 </button>
                             </div>
                         </div>
 
                         {/* Column Tasks */}
-                        <div className="flex-1 p-2 space-y-2 overflow-y-auto scrollbar-thin">
+                        <div className="flex-1 p-3 space-y-3 overflow-y-auto scrollbar-thin">
                             {column.tickets?.map((ticket) => (
                                 <Card
                                     key={ticket.id}
                                     draggable
                                     onDragStart={(e) => handleDragStart(e, ticket.id)}
-                                    className="cursor-move hover:shadow-md transition-shadow"
+                                    onDragEnd={handleDragEnd}
+                                    className="cursor-grab active:cursor-grabbing hover:shadow-xl transition-all duration-200 border-none relative group"
                                     style={{
                                         backgroundColor: theme.colors.background, // Card bg
-                                        borderColor: theme.colors.border
                                     }}
                                     onClick={() => onTicketClick(ticket.id)}
                                 >
-                                    <CardContent className="p-3">
-                                        <div className="space-y-2">
-                                            <div className="flex justify-between items-start gap-2">
-                                                <h4 className="font-medium text-sm line-clamp-2" style={{ color: theme.colors.text }}>
+                                    <CardContent className="p-4">
+                                        <div className="space-y-3">
+                                            {/* Priority Indicator Stripe */}
+                                            <div
+                                                className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full"
+                                                style={{ backgroundColor: getPriorityColor(ticket.priority, theme) }}
+                                            />
+
+                                            <div className="flex justify-between items-start gap-2 pl-2">
+                                                <h4 className="font-semibold text-sm line-clamp-2 leading-snug" style={{ color: theme.colors.text }}>
                                                     {ticket.subject}
                                                 </h4>
                                             </div>
 
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <Badge variant={getPriorityVariant(ticket.priority)} size="sm" className="text-[10px] px-1.5 h-5">
+                                            <div className="flex items-center gap-2 flex-wrap pl-2">
+                                                <Badge
+                                                    variant={getPriorityVariant(ticket.priority)}
+                                                    size="sm"
+                                                    className="text-[9px] uppercase font-black tracking-wider px-1.5"
+                                                >
                                                     {ticket.priority}
                                                 </Badge>
                                                 {ticket.tags?.map(tag => (
-                                                    <Badge key={tag} variant="outline" size="sm" className="text-[10px] px-1.5 h-5">
+                                                    <Badge key={tag} variant="outline" size="sm" className="text-[9px] opacity-60 font-bold px-1.5">
                                                         {tag}
                                                     </Badge>
                                                 ))}
                                             </div>
 
-                                            <div className="flex items-center justify-between pt-2 mt-2 border-t" style={{ borderColor: theme.colors.border }}>
-                                                <div className="flex items-center gap-1 text-xs text-gray-500">
+                                            <div className="flex items-center justify-between pt-3 mt-1 border-t pl-2" style={{ borderColor: `${theme.colors.border}40` }}>
+                                                <div className="flex items-center gap-2">
                                                     {ticket.assignee ? (
-                                                        <Avatar size="sm" name={`${ticket.assignee.first_name} ${ticket.assignee.last_name}`} src={ticket.assignee.avatar_url} />
+                                                        <Avatar
+                                                            size="sm"
+                                                            name={`${ticket.assignee.first_name} ${ticket.assignee.last_name}`}
+                                                            src={ticket.assignee.avatar_url}
+                                                            className="ring-2 ring-background"
+                                                        />
                                                     ) : (
-                                                        <User className="h-3 w-3" />
+                                                        <div className="p-1 rounded-full bg-black/5 dark:bg-white/5">
+                                                            <User className="h-3 w-3 opacity-40" />
+                                                        </div>
                                                     )}
                                                 </div>
                                                 {ticket.due_date && (
-                                                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                                                    <div className="flex items-center gap-1.5 text-[10px] font-bold opacity-50">
                                                         <Calendar className="h-3 w-3" />
                                                         <span>{new Date(ticket.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                                                     </div>
@@ -170,6 +219,12 @@ export default function TicketKanban({
                                     </CardContent>
                                 </Card>
                             ))}
+                            {/* Empty Drop Zone indicator */}
+                            {isDragOver && column.tickets?.length === 0 && (
+                                <div className="h-24 border-2 border-dashed border-primary/20 rounded-xl bg-primary/5 flex items-center justify-center">
+                                    <p className="text-xs text-primary/40 font-bold">Drop here</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -184,5 +239,14 @@ function getPriorityVariant(priority: string): 'default' | 'info' | 'warning' | 
         case 'urgent': return 'danger';
         case 'medium': return 'info';
         default: return 'default';
+    }
+}
+
+function getPriorityColor(priority: string, theme: any): string {
+    switch (priority?.toLowerCase()) {
+        case 'urgent': return '#ef4444'; // red
+        case 'high': return '#f59e0b'; // amber
+        case 'medium': return '#3b82f6'; // blue
+        default: return theme.colors.border;
     }
 }

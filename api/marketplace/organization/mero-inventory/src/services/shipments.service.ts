@@ -6,6 +6,7 @@ import { SalesOrder, SalesOrderStatus } from '../entities/sales-order.entity';
 import { StockService } from './stock.service';
 import { StockMovementType } from '../entities/stock-movement.entity';
 import { AuditLogsService } from '../../../../../src/audit-logs/audit-logs.service';
+import { InventoryAccountingService } from './inventory-accounting.service';
 
 @Injectable()
 export class ShipmentsService {
@@ -16,9 +17,10 @@ export class ShipmentsService {
         private salesOrderRepository: Repository<SalesOrder>,
         private stockService: StockService,
         private auditLogService: AuditLogsService,
+        private readonly inventoryAccountingService: InventoryAccountingService,
     ) { }
 
-    async create(salesOrderId: string, organizationId: string, userId: string): Promise<Shipment> {
+    async create(salesOrderId: string, organizationId: string, userId: string, data: any): Promise<Shipment> {
         const salesOrder = await this.salesOrderRepository.findOne({
             where: { id: salesOrderId, organization_id: organizationId },
             relations: ['items'],
@@ -49,12 +51,28 @@ export class ShipmentsService {
         const savedShipment = await this.shipmentRepository.save(shipment);
 
         // Deduct Stock
-        // Assuming default warehouse for now or need to pass warehouseId in create DTO.
-        // For MVP, if we don't have warehouse selection in Sales Order, we might fail or pick default.
-        // Let's assume we pass warehouseId in a DTO, but for now I'll check if stock service exists.
-        // Use a default warehouse or throwing error if not implemented is safer.
+        if (data.warehouseId) {
+            for (const item of salesOrder.items) {
+                await this.stockService.adjustStock(
+                    item.product_id,
+                    data.warehouseId,
+                    Number(item.quantity),
+                    StockMovementType.OUT,
+                    `Shipped for Order #${salesOrder.order_number}`,
+                    savedShipment.id,
+                    userId,
+                    organizationId
+                );
+            }
 
-        // TODO: Implement warehouse selection. For now, skipping stock deduction until warehouse logic is clear.
+            // Post COGS to accounting as DRAFT journal entry (non-blocking)
+            await this.inventoryAccountingService.postShipmentCogsToAccounting(
+                salesOrder.items,
+                savedShipment,
+                organizationId,
+                userId,
+            );
+        }
 
         // Update Sales Order Status
         salesOrder.status = SalesOrderStatus.SHIPPED;

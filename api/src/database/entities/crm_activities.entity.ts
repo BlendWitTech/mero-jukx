@@ -11,6 +11,7 @@ import { Organization } from './organizations.entity';
 import { User } from './users.entity';
 import { CrmLead } from './crm_leads.entity';
 import { CrmDeal } from './crm_deals.entity';
+import { CrmClient } from './crm_clients.entity';
 
 @Entity('crm_activities')
 export class CrmActivity {
@@ -59,6 +60,13 @@ export class CrmActivity {
     @ManyToOne(() => CrmDeal, (deal) => deal.activities, { onDelete: 'CASCADE' })
     @JoinColumn({ name: 'deal_id' })
     deal: CrmDeal;
+
+    @Column({ name: 'client_id', type: 'uuid', nullable: true })
+    clientId: string;
+
+    @ManyToOne(() => CrmClient, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'client_id' })
+    client: CrmClient;
 
     @Column({ name: 'assigned_to', type: 'uuid', nullable: true })
     assignedToId: string;

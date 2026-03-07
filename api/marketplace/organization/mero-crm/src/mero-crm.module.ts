@@ -9,6 +9,9 @@ import { CrmSettingsModule } from './modules/settings.module';
 import { LeadsModule } from './modules/leads.module';
 import { DealsModule } from './modules/deals.module';
 import { ActivitiesModule } from './modules/activities.module';
+import { AnalyticsModule } from './modules/analytics.module';
+import { CrmAutomationModule } from './modules/automation.module';
+import { CrmUtilityModule } from './modules/utility.module';
 
 @Module({
     imports: [
@@ -22,6 +25,9 @@ import { ActivitiesModule } from './modules/activities.module';
         LeadsModule,
         DealsModule,
         ActivitiesModule,
+        AnalyticsModule,
+        CrmAutomationModule,
+        CrmUtilityModule,
     ],
     exports: [
         ClientsModule,
@@ -34,6 +40,9 @@ import { ActivitiesModule } from './modules/activities.module';
         LeadsModule,
         DealsModule,
         ActivitiesModule,
+        AnalyticsModule,
+        CrmAutomationModule,
+        CrmUtilityModule,
     ],
 })
 export class MeroCrmModule { }

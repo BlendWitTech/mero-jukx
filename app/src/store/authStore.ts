@@ -15,7 +15,10 @@ interface Organization {
   id: string;
   name: string;
   slug: string;
+  currency?: string;
   mfa_enabled?: boolean;
+  org_type?: 'MAIN' | 'BRANCH' | 'CREATOR';
+  parent_id?: string | null;
 }
 
 interface AuthState {

@@ -25,15 +25,64 @@ fi
 # Check if Docker Compose file exists and start containers (only postgres and redis)
 if [ -f "docker-compose.yml" ]; then
     echo "[0/4] Starting Docker containers (PostgreSQL, Redis)..."
+    
+    # Check if Docker is running
+    if ! docker info > /dev/null 2>&1; then
+        echo ""
+        echo "╔══════════════════════════════════════════════════════════════╗"
+        echo "║  ERROR: Docker Desktop is NOT running!                       ║"
+        echo "╚══════════════════════════════════════════════════════════════╝"
+        echo ""
+        echo "The application requires PostgreSQL and Redis in Docker."
+        echo "Please start Docker Desktop and try again."
+        echo ""
+        exit 1
+    fi
+
     docker-compose up -d postgres redis > /dev/null 2>&1
     if [ $? -eq 0 ]; then
         echo "Docker containers started successfully."
     else
-        echo "WARNING: Docker Compose failed. Make sure Docker is running."
-        echo "Continuing anyway..."
+        echo "WARNING: Docker Compose failed. This might be because containers are already starting."
     fi
     echo ""
     sleep 3
+fi
+
+# Check if database is initialized
+echo "Checking database initialization..."
+npm run db:check > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "╔══════════════════════════════════════════════════════════════╗"
+    echo "║  WARNING: Database is NOT initialized!                     ║"
+    echo "╚══════════════════════════════════════════════════════════════╝"
+    echo ""
+    echo "The database tables have not been created yet."
+    echo "This will cause 'relation does not exist' errors when the app starts."
+    echo ""
+    echo "To initialize the database, run:"
+    echo "  npm run db:init"
+    echo ""
+    echo "This will:"
+    echo "  • Run all database migrations (create tables)"
+    echo "  • Seed the database with initial data"
+    echo ""
+    
+    read -p "Do you want to continue starting the servers anyway? (y/N): " response
+    if [ "$response" != "y" ] && [ "$response" != "Y" ]; then
+        echo ""
+        echo "Startup cancelled. Please run 'npm run db:init' first."
+        echo ""
+        exit 1
+    fi
+    echo ""
+    echo "Continuing with uninitialized database..."
+    echo "Note: You may see database errors until you run 'npm run db:init'"
+    echo ""
+else
+    echo "✓ Database is initialized"
+    echo ""
 fi
 
 # Function to cleanup background processes on exit

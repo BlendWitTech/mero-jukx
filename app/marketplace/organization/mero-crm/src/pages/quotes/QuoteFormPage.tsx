@@ -8,6 +8,7 @@ import { Card, Button, Input, Label, Textarea } from '@shared';
 import { ArrowLeft, Save, Plus, Trash2, FileSpreadsheet } from 'lucide-react';
 import { toast } from '@shared';
 import { useAppContext } from '../../contexts/AppContext';
+import ProductLookup from '../../components/ProductLookup';
 
 export default function QuoteFormPage() {
     const { theme } = useTheme();
@@ -225,11 +226,20 @@ export default function QuoteFormPage() {
                             <div key={index} className="grid grid-cols-12 gap-4 p-6 rounded-2xl bg-black/5 dark:bg-white/5 relative group animate-in slide-in-from-right-2 duration-300">
                                 <div className="col-span-12 md:col-span-4 space-y-2">
                                     <Label>Item Name</Label>
+                                    <ProductLookup
+                                        onSelect={(product) => {
+                                            handleItemChange(index, 'itemName', product.name);
+                                            handleItemChange(index, 'price', product.selling_price);
+                                            if (product.description) {
+                                                handleItemChange(index, 'description', product.description);
+                                            }
+                                        }}
+                                    />
                                     <Input
-                                        placeholder="Web Design Service"
+                                        placeholder="Or enter manually..."
                                         value={item.itemName}
                                         onChange={(e) => handleItemChange(index, 'itemName', e.target.value)}
-                                        className="bg-surface rounded-xl"
+                                        className="bg-surface rounded-xl mt-2"
                                         required
                                     />
                                 </div>

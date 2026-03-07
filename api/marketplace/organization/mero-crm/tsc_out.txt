@@ -1,0 +1,3 @@
+../../../src/database/entities/tasks.entity.ts(23,35): error TS2307: Cannot find module '../../marketplace/shared/mero-board/entities/task-checklist-item.entity' or its corresponding type declarations.
+../../../src/database/entities/tasks.entity.ts(170,54): error TS2339: Property 'task' does not exist on type 'unknown'.
+

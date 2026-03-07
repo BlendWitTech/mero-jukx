@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { Package, Check, Loader2, CreditCard, X, Calendar, ChevronDown, ChevronUp, Sparkles, Globe, Edit2, Save } from 'lucide-react';
@@ -14,21 +14,38 @@ import { usePermissions } from '../../hooks/usePermissions';
 import { formatLimit } from '../../utils/formatLimit';
 // Import shared components
 import { Button, Card } from '@shared';
-
 export default function PackagesPage() {
   const { isAuthenticated, accessToken, _hasHydrated } = useAuthStore();
+  const [activeTab, setActiveTab] = useState<'packages' | 'features'>('packages');
   const { theme } = useTheme();
   const queryClient = useQueryClient();
-  const [isNepal] = useState(() => isNepalRegion());
   const { hasPermission } = usePermissions();
+
+  const { data: organization } = useQuery<{ id: string; name: string; slug: string; country?: string }>({
+    queryKey: ['organization'],
+    queryFn: async () => {
+      const response = await api.get('/organizations/me');
+      return response.data;
+    },
+    enabled: _hasHydrated && isAuthenticated && !!accessToken,
+  });
+
+  const isNepal = useMemo(() => {
+    if (organization?.country) {
+      return organization.country.toLowerCase() === 'nepal';
+    }
+    return isNepalRegion();
+  }, [organization?.country]);
+
   const canUpgradePackage = hasPermission('packages.upgrade');
   const canPurchaseFeature = hasPermission('packages.features.purchase');
-  const [selectedGateway, setSelectedGateway] = useState<'esewa' | 'stripe'>('esewa');
+  const [selectedGateway, setSelectedGateway] = useState<string>('esewa');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [pendingPayment, setPendingPayment] = useState<{
     type: 'package' | 'feature';
     item: any;
   } | null>(null);
+
   const [selectedPeriod, setSelectedPeriod] = useState<'3_months' | '6_months' | '1_year' | 'custom'>('3_months');
   const [customMonths, setCustomMonths] = useState<number>(12);
   const [isCurrentPackageExpanded, setIsCurrentPackageExpanded] = useState(true);
@@ -43,7 +60,7 @@ export default function PackagesPage() {
   const [showCredentialModal, setShowCredentialModal] = useState(false);
   const [pendingAutoRenew, setPendingAutoRenew] = useState<boolean | null>(null);
   const [autoRenewCredentials, setAutoRenewCredentials] = useState({
-    payment_method: 'esewa' as 'esewa' | 'stripe',
+    payment_method: 'esewa' as string,
     esewa_username: '',
     stripe_card_token: '',
     card_last4: '',
@@ -56,10 +73,10 @@ export default function PackagesPage() {
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
     });
   };
 
@@ -124,10 +141,10 @@ export default function PackagesPage() {
   // Get package display name with upgrades
   const getPackageDisplayName = () => {
     if (!currentPackage?.package) return 'No Package';
-    
+
     const packageName = currentPackage.package.name;
     const activeFeatures = currentPackage.active_features || [];
-    
+
     if (activeFeatures.length === 0) {
       return packageName;
     }
@@ -219,18 +236,18 @@ export default function PackagesPage() {
         queryClient.refetchQueries({ queryKey: ['packages'], exact: false });
         queryClient.refetchQueries({ queryKey: ['package-features'], exact: false });
       };
-      
+
       // Refetch current package when page is focused
       const handleFocus = () => {
         queryClient.refetchQueries({ queryKey: ['current-package'], exact: false });
       };
-      
+
       window.addEventListener('focus', handleFocus);
       window.addEventListener('package-updated', handlePackageUpdate);
-      
+
       // Also refetch on mount
       queryClient.refetchQueries({ queryKey: ['current-package'], exact: false });
-      
+
       return () => {
         window.removeEventListener('focus', handleFocus);
         window.removeEventListener('package-updated', handlePackageUpdate);
@@ -294,14 +311,6 @@ export default function PackagesPage() {
     retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
-  const { data: organization } = useQuery<{ id: string; name: string; slug: string }>({
-    queryKey: ['organization'],
-    queryFn: async () => {
-      const response = await api.get('/organizations/me');
-      return response.data;
-    },
-    enabled: _hasHydrated && isAuthenticated && !!accessToken,
-  });
 
   // Update slug when organization data changes
   useEffect(() => {
@@ -332,7 +341,7 @@ export default function PackagesPage() {
     },
   });
 
-  const canEditSlug = currentPackage?.package?.slug && 
+  const canEditSlug = currentPackage?.package?.slug &&
     ['basic', 'platinum', 'diamond'].includes(currentPackage.package.slug);
 
   // Create payment mutation for package upgrade
@@ -345,11 +354,11 @@ export default function PackagesPage() {
         package_id: data.package_id,
         description: `Upgrade to ${data.package_name}`,
       });
-      
+
       // Ensure amount is a number, not a string
       const amount = typeof data.amount === 'string' ? parseFloat(data.amount) : data.amount;
       const packageId = typeof data.package_id === 'string' ? parseInt(data.package_id, 10) : data.package_id;
-      
+
       console.log('Sending payment request:', {
         gateway: data.gateway,
         payment_type: 'package_upgrade',
@@ -359,7 +368,7 @@ export default function PackagesPage() {
         packageIdType: typeof packageId,
         description: `Upgrade to ${data.package_name}`,
       });
-      
+
       const response = await api.post('/payments', {
         gateway: data.gateway,
         payment_type: 'package_upgrade',
@@ -395,13 +404,13 @@ export default function PackagesPage() {
       });
 
       try {
-        if (gateway === 'stripe') {
+        if (gateway === 'stripe' || gateway === 'paypal' || gateway === 'khalti') {
           // Stripe: redirect to checkout URL
           window.location.href = data.payment_form.formUrl;
         } else {
           // eSewa: create and submit form
           if (!data.payment_form.formData) {
-            toast.error('Invalid eSewa payment form data');
+            toast.error(`Invalid ${gateway} payment form data`);
             return;
           }
 
@@ -410,7 +419,6 @@ export default function PackagesPage() {
           form.action = data.payment_form.formUrl;
           form.target = '_self';
           form.style.display = 'none';
-          form.enctype = 'application/x-www-form-urlencoded';
 
           // Add form fields
           Object.entries(data.payment_form.formData).forEach(([key, value]) => {
@@ -421,14 +429,9 @@ export default function PackagesPage() {
             form.appendChild(input);
           });
 
-          console.log('Submitting eSewa form:', {
-            url: form.action,
-            method: form.method,
-            fields: Object.keys(data.payment_form.formData),
-          });
 
           document.body.appendChild(form);
-          
+
           // Small delay to ensure form is in DOM
           setTimeout(() => {
             form.submit();
@@ -442,20 +445,20 @@ export default function PackagesPage() {
     onError: (error: any) => {
       console.error('Package payment error:', error);
       console.error('Error response:', error?.response?.data);
-      
+
       // Check for eSewa token authentication error
       const errorData = error?.response?.data;
       if (errorData?.set_token_message || errorData?.user_token) {
         toast.error(
-          'eSewa requires token authentication. Please enable Mock Mode in .env (ESEWA_USE_MOCK_MODE=true) for development testing.',
+          `${selectedGateway === 'esewa' ? 'eSewa' : selectedGateway} requires specific configuration or token. Please check your environment settings.`,
           { duration: 6000 }
         );
       } else {
-        let errorMessage = errorData?.message || 
-                          errorData?.error || 
-                          error?.message || 
-                          'Failed to create payment';
-        
+        let errorMessage = errorData?.message ||
+          errorData?.error ||
+          error?.message ||
+          'Failed to create payment';
+
         // Provide more specific error messages for Stripe
         if (errorMessage.includes('Stripe') || errorMessage.includes('stripe')) {
           if (errorMessage.includes('authentication') || errorMessage.includes('API keys') || errorMessage.includes('not configured')) {
@@ -466,15 +469,15 @@ export default function PackagesPage() {
             errorMessage = 'Invalid currency. Please try again.';
           }
         }
-        
+
         toast.error(errorMessage, { duration: 5000 });
       }
-      
+
       // Log validation errors if present
       if (errorData?.message && Array.isArray(errorData.message)) {
         console.error('Validation errors:', errorData.message);
       }
-      
+
       // Log full error for debugging
       console.error('Full error object:', error);
     },
@@ -482,7 +485,7 @@ export default function PackagesPage() {
 
   // Create payment mutation for feature purchase
   const createFeaturePaymentMutation = useMutation({
-    mutationFn: async (data: { feature_id: number; amount: number; feature_name: string; gateway: 'esewa' | 'stripe' }) => {
+    mutationFn: async (data: { feature_id: number; amount: number; feature_name: string; gateway: string }) => {
       console.log('Creating feature payment:', {
         gateway: data.gateway,
         payment_type: 'one_time',
@@ -490,7 +493,7 @@ export default function PackagesPage() {
         feature_id: data.feature_id,
         description: `Purchase ${data.feature_name}`,
       });
-      
+
       const response = await api.post('/payments', {
         gateway: data.gateway,
         payment_type: 'one_time',
@@ -554,7 +557,7 @@ export default function PackagesPage() {
           });
 
           document.body.appendChild(form);
-          
+
           // Small delay to ensure form is in DOM
           setTimeout(() => {
             form.submit();
@@ -568,20 +571,20 @@ export default function PackagesPage() {
     onError: (error: any) => {
       console.error('Feature payment error:', error);
       console.error('Error response:', error?.response?.data);
-      
+
       // Check for eSewa token authentication error
       const errorData = error?.response?.data;
       if (errorData?.set_token_message || errorData?.user_token) {
         toast.error(
-          'eSewa requires token authentication. Please enable Mock Mode in .env (ESEWA_USE_MOCK_MODE=true) for development testing.',
+          `${selectedGateway === 'esewa' ? 'eSewa' : selectedGateway} requires specific configuration or token. Please check your environment settings.`,
           { duration: 6000 }
         );
       } else {
-        let errorMessage = errorData?.message || 
-                          errorData?.error || 
-                          error?.message || 
-                          'Failed to create payment';
-        
+        let errorMessage = errorData?.message ||
+          errorData?.error ||
+          error?.message ||
+          'Failed to create payment';
+
         // Provide more specific error messages for Stripe
         if (errorMessage.includes('Stripe') || errorMessage.includes('stripe')) {
           if (errorMessage.includes('authentication') || errorMessage.includes('API keys') || errorMessage.includes('not configured')) {
@@ -592,13 +595,13 @@ export default function PackagesPage() {
             errorMessage = 'Invalid currency. Please try again.';
           }
         }
-        
+
         toast.error(errorMessage, { duration: 5000 });
       }
-      
+
       // Log full error for debugging
       console.error('Full error object:', error);
-      
+
       // Log validation errors if present
       if (errorData?.message && Array.isArray(errorData.message)) {
         console.error('Validation errors:', errorData.message);
@@ -639,11 +642,11 @@ export default function PackagesPage() {
     setSelectedPeriod('3_months');
     setCustomMonths(12);
     setUpgradePriceInfo(null);
-    
+
     // Show payment method selection modal first
     setPendingPayment({ type: 'package', item: pkg });
     setShowPaymentModal(true);
-    
+
     // Calculate upgrade price if upgrading mid-subscription (after modal opens)
     try {
       const priceInfo = await calculateUpgradePriceMutation.mutateAsync({
@@ -651,7 +654,7 @@ export default function PackagesPage() {
         period: '3_months',
       });
       setUpgradePriceInfo(priceInfo);
-      
+
       if (!priceInfo.can_upgrade && priceInfo.reason) {
         toast.error(priceInfo.reason);
         setShowPaymentModal(false);
@@ -686,11 +689,11 @@ export default function PackagesPage() {
     if (!pendingPayment) return;
 
     const item = pendingPayment.item;
-    
+
     if (pendingPayment.type === 'package') {
       // Recalculate upgrade price with selected period
       let finalPrice = 0;
-      
+
       if (upgradePriceInfo && upgradePriceInfo.can_upgrade && upgradePriceInfo.prorated_credit > 0) {
         // Mid-subscription upgrade - recalculate with selected period
         try {
@@ -699,12 +702,12 @@ export default function PackagesPage() {
             period: selectedPeriod,
             custom_months: selectedPeriod === 'custom' ? customMonths : undefined,
           });
-          
+
           if (!priceInfo.can_upgrade) {
             toast.error(priceInfo.reason || 'Cannot upgrade to this package');
             return;
           }
-          
+
           finalPrice = priceInfo.final_price;
         } catch (error) {
           console.error('Error calculating final upgrade price:', error);
@@ -725,7 +728,7 @@ export default function PackagesPage() {
         );
         finalPrice = subscription.discountedPrice;
       }
-      
+
       // Calculate amount based on gateway
       // Stripe uses USD, eSewa uses NPR
       const amount = selectedGateway === 'stripe'
@@ -785,208 +788,208 @@ export default function PackagesPage() {
           {currentPackage && (
             <div className="mb-4 overflow-hidden">
               <Card style={{ backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
-              <button
-                onClick={() => setIsCurrentPackageExpanded(!isCurrentPackageExpanded)}
-                className="w-full flex items-center justify-between p-4 transition-colors"
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.background}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              >
-                <div className="flex items-center flex-1">
-                  <div className="flex items-center justify-center w-12 h-12 rounded-lg mr-4" style={{ background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})` }}>
-                    <Package className="h-6 w-6 text-white" />
-                  </div>
-                  <div className="text-left flex-1">
-                    <div className="flex items-center gap-2">
-                      <h2 className="text-lg font-semibold" style={{ color: theme.colors.text }}>
-                        {getPackageDisplayName()}
-                      </h2>
-                      {currentPackage?.active_features && currentPackage.active_features.length > 0 && (
-                        <span className="px-2 py-0.5 text-xs font-medium rounded-full flex items-center gap-1" style={{ background: `linear-gradient(to right, ${theme.colors.primary}33, ${theme.colors.primary}4D)`, color: theme.colors.primary, border: `1px solid ${theme.colors.primary}4D` }}>
-                          <Sparkles className="h-3 w-3" />
-                          Upgraded
-                        </span>
-                      )}
+                <button
+                  onClick={() => setIsCurrentPackageExpanded(!isCurrentPackageExpanded)}
+                  className="w-full flex items-center justify-between p-4 transition-colors"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.background}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                >
+                  <div className="flex items-center flex-1">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-lg mr-4" style={{ background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})` }}>
+                      <Package className="h-6 w-6 text-white" />
                     </div>
-                    <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
-                      {formatLimit(currentPackage?.current_limits?.users)} users, {formatLimit(currentPackage?.current_limits?.roles)} roles
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  {(() => {
-                    // Calculate total price including package and features
-                    const packagePrice = parseFloat(String(currentPackage?.package?.price || 0)) || 0;
-                    const featuresPrice = currentPackage?.active_features?.reduce((sum: number, feature: any) => {
-                      const featurePrice = parseFloat(String(feature.feature?.price || 0)) || 0;
-                      return sum + featurePrice;
-                    }, 0) || 0;
-                    const totalPrice = packagePrice + featuresPrice;
-                    
-                    return (
-                      <div className="text-right">
-                        <p className="text-xl font-bold" style={{ color: theme.colors.primary }}>
-                          {totalPrice === 0 
-                            ? 'Free' 
-                            : isNepal
-                              ? `${formatCurrency(convertUSDToNPR(totalPrice), 'NPR')} (${formatCurrency(totalPrice, 'USD')})`
-                              : `${formatCurrency(totalPrice, 'USD')} (${formatCurrency(convertUSDToNPR(totalPrice), 'NPR')})`}
-                        </p>
-                        {totalPrice > 0 && (
-                          <p className="text-xs" style={{ color: theme.colors.textSecondary }}>per month</p>
+                    <div className="text-left flex-1">
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold" style={{ color: theme.colors.text }}>
+                          {getPackageDisplayName()}
+                        </h2>
+                        {currentPackage?.active_features && currentPackage.active_features.length > 0 && (
+                          <span className="px-2 py-0.5 text-xs font-medium rounded-full flex items-center gap-1" style={{ background: `linear-gradient(to right, ${theme.colors.primary}33, ${theme.colors.primary}4D)`, color: theme.colors.primary, border: `1px solid ${theme.colors.primary}4D` }}>
+                            <Sparkles className="h-3 w-3" />
+                            Upgraded
+                          </span>
                         )}
                       </div>
-                    );
-                  })()}
-                  {isCurrentPackageExpanded ? (
-                    <ChevronUp className="h-5 w-5" style={{ color: theme.colors.textSecondary }} />
-                  ) : (
-                    <ChevronDown className="h-5 w-5" style={{ color: theme.colors.textSecondary }} />
-                  )}
-                </div>
-              </button>
-
-              {isCurrentPackageExpanded && (
-                <div className="px-4 pb-4 pt-4 space-y-4" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
-
-                  {/* Package Expiration */}
-                  {currentPackage?.package_expires_at && (
-                    <div className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
-                      <div className="flex items-center text-sm" style={{ color: theme.colors.textSecondary }}>
-                        <Calendar className="h-4 w-4 mr-2" style={{ color: theme.colors.primary }} />
-                        <span>Expires on: <strong style={{ color: theme.colors.text }}>{formatDate(currentPackage.package_expires_at)}</strong></span>
-                      </div>
-                      {(() => {
-                        const daysRemaining = getDaysRemaining(currentPackage.package_expires_at);
-                        if (daysRemaining !== null) {
-                          if (daysRemaining < 0) {
-                            return <span className="px-2 py-1 text-xs font-semibold bg-[#ed4245]/20 text-[#ed4245] border border-[#ed4245]/30 rounded">Expired</span>;
-                          } else if (daysRemaining <= 3) {
-                            return <span className="px-2 py-1 text-xs font-semibold bg-[#ed4245]/20 text-[#ed4245] border border-[#ed4245]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
-                          } else if (daysRemaining <= 7) {
-                            return <span className="px-2 py-1 text-xs font-semibold bg-[#faa61a]/20 text-[#faa61a] border border-[#faa61a]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
-                          } else {
-                            return <span className="px-2 py-1 text-xs font-medium bg-[#23a55a]/20 text-[#23a55a] border border-[#23a55a]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
-                          }
-                        }
-                        return null;
-                      })()}
-                    </div>
-                  )}
-
-                  {/* Auto-Renewal Toggle */}
-                  {currentPackage?.package && currentPackage.package.price > 0 && canUpgradePackage && (
-                    <div className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
-                      <div className="flex items-center gap-3 flex-1">
-                        <div className="p-2 rounded-lg" style={{ backgroundColor: theme.colors.primary + '33' }}>
-                          <Calendar className="h-4 w-4" style={{ color: theme.colors.primary }} />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium" style={{ color: theme.colors.text }}>Auto-Renewal</p>
-                          <p className="text-xs mt-0.5" style={{ color: theme.colors.textSecondary }}>Automatically renew when package expires</p>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
-                        <input
-                          type="checkbox"
-                          checked={currentPackage?.package_auto_renew || false}
-                          onChange={(e) => handleAutoRenewToggle(e.target.checked)}
-                          disabled={toggleAutoRenewMutation.isPending}
-                          className="sr-only peer"
-                        />
-                        <div 
-                          className="w-11 h-6 peer-focus:outline-none peer-focus:ring-4 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:border after:rounded-full after:h-5 after:w-5 after:transition-all"
-                          style={{ 
-                            backgroundColor: theme.colors.surface,
-                            // @ts-ignore - CSS custom property
-                            '--tw-ring-color': theme.colors.primary + '4D'
-                          } as React.CSSProperties}
-                          onMouseEnter={(e) => {
-                            if (!currentPackage?.package_auto_renew) {
-                              e.currentTarget.style.backgroundColor = theme.colors.border;
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (!currentPackage?.package_auto_renew) {
-                              e.currentTarget.style.backgroundColor = theme.colors.surface;
-                            }
-                          }}
-                        ></div>
-                      </label>
-                    </div>
-                  )}
-
-                  {/* Package and Features Cards */}
-                  <div>
-                    <h3 className="text-sm font-semibold mb-3" style={{ color: theme.colors.text }}>Active Subscriptions</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {/* Package Card */}
-                      {(() => {
-                        const packagePrice = parseFloat(String(currentPackage?.package?.price || 0)) || 0;
-                        if (packagePrice === 0) return null;
-                        
-                        return (
-                          <div className="p-4 rounded-lg" style={{ background: `linear-gradient(to bottom right, ${theme.colors.surface}, ${theme.colors.background})`, border: `1px solid ${theme.colors.border}` }}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                <Package className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                                <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
-                                  {currentPackage?.package?.name || 'Package'}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="mt-2">
-                              <p className="text-2xl font-bold" style={{ color: theme.colors.primary }}>
-                                {isNepal
-                                  ? formatCurrency(convertUSDToNPR(packagePrice), 'NPR')
-                                  : formatCurrency(packagePrice, 'USD')}
-                              </p>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                      
-                      {/* Feature Cards */}
-                      {currentPackage?.active_features && currentPackage.active_features.length > 0 && (
-                        <>
-                          {currentPackage.active_features.map((feature: any) => {
-                            const featurePrice = parseFloat(String(feature.feature?.price || 0)) || 0;
-                            if (featurePrice === 0) return null;
-                            
-                            return (
-                              <div
-                                key={feature.id}
-                                className="p-4 rounded-lg"
-                                style={{ background: `linear-gradient(to bottom right, ${theme.colors.background}, ${theme.colors.surface})`, border: `1px solid ${theme.colors.border}` }}
-                              >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-2">
-                                    <Sparkles className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                                    <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
-                                      {feature.feature?.type === 'user_upgrade' 
-                                        ? `+${feature.feature.value || 'Unlimited'} Users`
-                                        : feature.feature?.type === 'role_upgrade'
-                                        ? `+${feature.feature.value || 'Unlimited'} Roles`
-                                        : feature.feature?.name || 'Feature'}
-                                    </span>
-                                  </div>
-                                </div>
-                                <div className="mt-2">
-                                  <p className="text-2xl font-bold" style={{ color: theme.colors.primary }}>
-                                    {isNepal
-                                      ? formatCurrency(convertUSDToNPR(featurePrice), 'NPR')
-                                      : formatCurrency(featurePrice, 'USD')}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </>
-                      )}
+                      <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
+                        {formatLimit(currentPackage?.current_limits?.users)} users, {formatLimit(currentPackage?.current_limits?.roles)} roles
+                      </p>
                     </div>
                   </div>
-                </div>
-              )}
-            </Card>
+                  <div className="flex items-center gap-4">
+                    {(() => {
+                      // Calculate total price including package and features
+                      const packagePrice = parseFloat(String(currentPackage?.package?.price || 0)) || 0;
+                      const featuresPrice = currentPackage?.active_features?.reduce((sum: number, feature: any) => {
+                        const featurePrice = parseFloat(String(feature.feature?.price || 0)) || 0;
+                        return sum + featurePrice;
+                      }, 0) || 0;
+                      const totalPrice = packagePrice + featuresPrice;
+
+                      return (
+                        <div className="text-right">
+                          <p className="text-xl font-bold" style={{ color: theme.colors.primary }}>
+                            {totalPrice === 0
+                              ? 'Free'
+                              : isNepal
+                                ? `${formatCurrency(convertUSDToNPR(totalPrice), 'NPR')} (${formatCurrency(totalPrice, 'USD')})`
+                                : `${formatCurrency(totalPrice, 'USD')} (${formatCurrency(convertUSDToNPR(totalPrice), 'NPR')})`}
+                          </p>
+                          {totalPrice > 0 && (
+                            <p className="text-xs" style={{ color: theme.colors.textSecondary }}>per month</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {isCurrentPackageExpanded ? (
+                      <ChevronUp className="h-5 w-5" style={{ color: theme.colors.textSecondary }} />
+                    ) : (
+                      <ChevronDown className="h-5 w-5" style={{ color: theme.colors.textSecondary }} />
+                    )}
+                  </div>
+                </button>
+
+                {isCurrentPackageExpanded && (
+                  <div className="px-4 pb-4 pt-4 space-y-4" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
+
+                    {/* Package Expiration */}
+                    {currentPackage?.package_expires_at && (
+                      <div className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                        <div className="flex items-center text-sm" style={{ color: theme.colors.textSecondary }}>
+                          <Calendar className="h-4 w-4 mr-2" style={{ color: theme.colors.primary }} />
+                          <span>Expires on: <strong style={{ color: theme.colors.text }}>{formatDate(currentPackage.package_expires_at)}</strong></span>
+                        </div>
+                        {(() => {
+                          const daysRemaining = getDaysRemaining(currentPackage.package_expires_at);
+                          if (daysRemaining !== null) {
+                            if (daysRemaining < 0) {
+                              return <span className="px-2 py-1 text-xs font-semibold bg-[#ed4245]/20 text-[#ed4245] border border-[#ed4245]/30 rounded">Expired</span>;
+                            } else if (daysRemaining <= 3) {
+                              return <span className="px-2 py-1 text-xs font-semibold bg-[#ed4245]/20 text-[#ed4245] border border-[#ed4245]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
+                            } else if (daysRemaining <= 7) {
+                              return <span className="px-2 py-1 text-xs font-semibold bg-[#faa61a]/20 text-[#faa61a] border border-[#faa61a]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
+                            } else {
+                              return <span className="px-2 py-1 text-xs font-medium bg-[#23a55a]/20 text-[#23a55a] border border-[#23a55a]/30 rounded">{daysRemaining} day{daysRemaining !== 1 ? 's' : ''} left</span>;
+                            }
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    )}
+
+                    {/* Auto-Renewal Toggle */}
+                    {currentPackage?.package && currentPackage.package.price > 0 && canUpgradePackage && (
+                      <div className="flex items-center justify-between p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                        <div className="flex items-center gap-3 flex-1">
+                          <div className="p-2 rounded-lg" style={{ backgroundColor: theme.colors.primary + '33' }}>
+                            <Calendar className="h-4 w-4" style={{ color: theme.colors.primary }} />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium" style={{ color: theme.colors.text }}>Auto-Renewal</p>
+                            <p className="text-xs mt-0.5" style={{ color: theme.colors.textSecondary }}>Automatically renew when package expires</p>
+                          </div>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
+                          <input
+                            type="checkbox"
+                            checked={currentPackage?.package_auto_renew || false}
+                            onChange={(e) => handleAutoRenewToggle(e.target.checked)}
+                            disabled={toggleAutoRenewMutation.isPending}
+                            className="sr-only peer"
+                          />
+                          <div
+                            className="w-11 h-6 peer-focus:outline-none peer-focus:ring-4 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:border after:rounded-full after:h-5 after:w-5 after:transition-all"
+                            style={{
+                              backgroundColor: theme.colors.surface,
+                              // @ts-ignore - CSS custom property
+                              '--tw-ring-color': theme.colors.primary + '4D'
+                            } as React.CSSProperties}
+                            onMouseEnter={(e) => {
+                              if (!currentPackage?.package_auto_renew) {
+                                e.currentTarget.style.backgroundColor = theme.colors.border;
+                              }
+                            }}
+                            onMouseLeave={(e) => {
+                              if (!currentPackage?.package_auto_renew) {
+                                e.currentTarget.style.backgroundColor = theme.colors.surface;
+                              }
+                            }}
+                          ></div>
+                        </label>
+                      </div>
+                    )}
+
+                    {/* Package and Features Cards */}
+                    <div>
+                      <h3 className="text-sm font-semibold mb-3" style={{ color: theme.colors.text }}>Active Subscriptions</h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Package Card */}
+                        {(() => {
+                          const packagePrice = parseFloat(String(currentPackage?.package?.price || 0)) || 0;
+                          if (packagePrice === 0) return null;
+
+                          return (
+                            <div className="p-4 rounded-lg" style={{ background: `linear-gradient(to bottom right, ${theme.colors.surface}, ${theme.colors.background})`, border: `1px solid ${theme.colors.border}` }}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Package className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                                  <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
+                                    {currentPackage?.package?.name || 'Package'}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="mt-2">
+                                <p className="text-2xl font-bold" style={{ color: theme.colors.primary }}>
+                                  {isNepal
+                                    ? formatCurrency(convertUSDToNPR(packagePrice), 'NPR')
+                                    : formatCurrency(packagePrice, 'USD')}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* Feature Cards */}
+                        {currentPackage?.active_features && currentPackage.active_features.length > 0 && (
+                          <>
+                            {currentPackage.active_features.map((feature: any) => {
+                              const featurePrice = parseFloat(String(feature.feature?.price || 0)) || 0;
+                              if (featurePrice === 0) return null;
+
+                              return (
+                                <div
+                                  key={feature.id}
+                                  className="p-4 rounded-lg"
+                                  style={{ background: `linear-gradient(to bottom right, ${theme.colors.background}, ${theme.colors.surface})`, border: `1px solid ${theme.colors.border}` }}
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <Sparkles className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                                      <span className="text-sm font-medium" style={{ color: theme.colors.text }}>
+                                        {feature.feature?.type === 'user_upgrade'
+                                          ? `+${feature.feature.value || 'Unlimited'} Users`
+                                          : feature.feature?.type === 'role_upgrade'
+                                            ? `+${feature.feature.value || 'Unlimited'} Roles`
+                                            : feature.feature?.name || 'Feature'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <div className="mt-2">
+                                    <p className="text-2xl font-bold" style={{ color: theme.colors.primary }}>
+                                      {isNepal
+                                        ? formatCurrency(convertUSDToNPR(featurePrice), 'NPR')
+                                        : formatCurrency(featurePrice, 'USD')}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </Card>
             </div>
           )}
 
@@ -994,162 +997,162 @@ export default function PackagesPage() {
           {canEditSlug && organization && (
             <div className="mb-4">
               <Card style={{ backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 rounded-lg" style={{ backgroundColor: theme.colors.primary + '33' }}>
-                  <Globe className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                </div>
-                <div className="flex-1">
-                  <h2 className="text-lg font-semibold" style={{ color: theme.colors.text }}>Organization URL</h2>
-                  <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
-                    Customize your organization's URL slug
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>
-                    Current URL
-                  </label>
-                  <div className="flex items-center gap-2 p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
-                    <span className="text-sm" style={{ color: theme.colors.textSecondary }}>https://yourdomain.com/org/</span>
-                    <span className="text-sm font-medium" style={{ color: theme.colors.text }}>{organization.slug || 'your-slug'}</span>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg" style={{ backgroundColor: theme.colors.primary + '33' }}>
+                    <Globe className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold" style={{ color: theme.colors.text }}>Organization URL</h2>
+                    <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
+                      Customize your organization's URL slug
+                    </p>
                   </div>
                 </div>
 
-                {isEditingSlug ? (
-                  <div className="space-y-3">
-                    <div>
-                      <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>
-                        New URL Slug
-                      </label>
-                      <input
-                        type="text"
-                        value={newSlug}
-                        onChange={(e) => {
-                          // Allow lowercase letters, numbers, and hyphens
-                          // Remove any characters that are not a-z, 0-9, or hyphen
-                          let value = e.target.value.toLowerCase();
-                          // First, remove invalid characters (keep only a-z, 0-9, and -)
-                          value = value.replace(/[^a-z0-9\-]/g, '');
-                          // Remove consecutive hyphens (replace multiple hyphens with single hyphen)
-                          // But allow typing hyphens at the end while user is typing
-                          value = value.replace(/-{2,}/g, '-');
-                          setNewSlug(value);
-                        }}
-                        onBlur={(e) => {
-                          // Clean up leading/trailing hyphens only when user finishes editing
-                          let value = e.target.value;
-                          // Remove leading and trailing hyphens
-                          value = value.replace(/^-+|-+$/g, '');
-                          setNewSlug(value);
-                        }}
-                        placeholder="your-organization-slug"
-                        className="w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 transition-colors"
-                        style={{ 
-                          backgroundColor: theme.colors.background,
-                          border: `1px solid ${theme.colors.border}`,
-                          color: theme.colors.text,
-                          // @ts-ignore - CSS custom property
-                          '--tw-ring-color': theme.colors.primary
-                        } as React.CSSProperties}
-                        disabled={updateSlugMutation.isPending}
-                      />
-                      <p className="mt-1 text-xs" style={{ color: theme.colors.textSecondary }}>
-                        Only lowercase letters, numbers, and hyphens. Must be 3-50 characters.
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          if (newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
-                            updateSlugMutation.mutate(newSlug);
-                          } else if (newSlug === organization.slug) {
-                            toast.error('Please enter a different slug');
-                          } else {
-                            toast.error('Slug must be between 3 and 50 characters');
-                          }
-                        }}
-                        disabled={updateSlugMutation.isPending || newSlug.length < 3 || newSlug.length > 50 || newSlug === organization.slug}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        style={{ backgroundColor: theme.colors.primary, color: '#ffffff' }}
-                        onMouseEnter={(e) => {
-                          if (!updateSlugMutation.isPending && newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
-                            e.currentTarget.style.backgroundColor = theme.colors.secondary;
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!updateSlugMutation.isPending && newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
-                            e.currentTarget.style.backgroundColor = theme.colors.primary;
-                          }
-                        }}
-                      >
-                        {updateSlugMutation.isPending ? (
-                          <>
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                            Saving...
-                          </>
-                        ) : (
-                          <>
-                            <Save className="h-4 w-4" />
-                            Save
-                          </>
-                        )}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setIsEditingSlug(false);
-                          setNewSlug(organization.slug || '');
-                        }}
-                        disabled={updateSlugMutation.isPending}
-                        className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
-                        style={{ 
-                          backgroundColor: theme.colors.surface,
-                          color: theme.colors.textSecondary
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!updateSlugMutation.isPending) {
-                            e.currentTarget.style.backgroundColor = theme.colors.background;
-                            e.currentTarget.style.color = theme.colors.text;
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!updateSlugMutation.isPending) {
-                            e.currentTarget.style.backgroundColor = theme.colors.surface;
-                            e.currentTarget.style.color = theme.colors.textSecondary;
-                          }
-                        }}
-                      >
-                        Cancel
-                      </button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>
+                      Current URL
+                    </label>
+                    <div className="flex items-center gap-2 p-3 rounded-lg" style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}` }}>
+                      <span className="text-sm" style={{ color: theme.colors.textSecondary }}>https://yourdomain.com/org/</span>
+                      <span className="text-sm font-medium" style={{ color: theme.colors.text }}>{organization.slug || 'your-slug'}</span>
                     </div>
                   </div>
-                ) : (
-                  <button
-                    onClick={() => {
-                      setIsEditingSlug(true);
-                      setNewSlug(organization.slug || '');
-                    }}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
-                    style={{ 
-                      backgroundColor: theme.colors.surface,
-                      color: theme.colors.textSecondary
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.backgroundColor = theme.colors.background;
-                      e.currentTarget.style.color = theme.colors.text;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.backgroundColor = theme.colors.surface;
-                      e.currentTarget.style.color = theme.colors.textSecondary;
-                    }}
-                  >
-                    <Edit2 className="h-4 w-4" />
-                    Edit URL
-                  </button>
-                )}
-              </div>
-            </Card>
+
+                  {isEditingSlug ? (
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>
+                          New URL Slug
+                        </label>
+                        <input
+                          type="text"
+                          value={newSlug}
+                          onChange={(e) => {
+                            // Allow lowercase letters, numbers, and hyphens
+                            // Remove any characters that are not a-z, 0-9, or hyphen
+                            let value = e.target.value.toLowerCase();
+                            // First, remove invalid characters (keep only a-z, 0-9, and -)
+                            value = value.replace(/[^a-z0-9\-]/g, '');
+                            // Remove consecutive hyphens (replace multiple hyphens with single hyphen)
+                            // But allow typing hyphens at the end while user is typing
+                            value = value.replace(/-{2,}/g, '-');
+                            setNewSlug(value);
+                          }}
+                          onBlur={(e) => {
+                            // Clean up leading/trailing hyphens only when user finishes editing
+                            let value = e.target.value;
+                            // Remove leading and trailing hyphens
+                            value = value.replace(/^-+|-+$/g, '');
+                            setNewSlug(value);
+                          }}
+                          placeholder="your-organization-slug"
+                          className="w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 transition-colors"
+                          style={{
+                            backgroundColor: theme.colors.background,
+                            border: `1px solid ${theme.colors.border}`,
+                            color: theme.colors.text,
+                            // @ts-ignore - CSS custom property
+                            '--tw-ring-color': theme.colors.primary
+                          } as React.CSSProperties}
+                          disabled={updateSlugMutation.isPending}
+                        />
+                        <p className="mt-1 text-xs" style={{ color: theme.colors.textSecondary }}>
+                          Only lowercase letters, numbers, and hyphens. Must be 3-50 characters.
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
+                              updateSlugMutation.mutate(newSlug);
+                            } else if (newSlug === organization.slug) {
+                              toast.error('Please enter a different slug');
+                            } else {
+                              toast.error('Slug must be between 3 and 50 characters');
+                            }
+                          }}
+                          disabled={updateSlugMutation.isPending || newSlug.length < 3 || newSlug.length > 50 || newSlug === organization.slug}
+                          className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ backgroundColor: theme.colors.primary, color: '#ffffff' }}
+                          onMouseEnter={(e) => {
+                            if (!updateSlugMutation.isPending && newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
+                              e.currentTarget.style.backgroundColor = theme.colors.secondary;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!updateSlugMutation.isPending && newSlug.length >= 3 && newSlug.length <= 50 && newSlug !== organization.slug) {
+                              e.currentTarget.style.backgroundColor = theme.colors.primary;
+                            }
+                          }}
+                        >
+                          {updateSlugMutation.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Saving...
+                            </>
+                          ) : (
+                            <>
+                              <Save className="h-4 w-4" />
+                              Save
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditingSlug(false);
+                            setNewSlug(organization.slug || '');
+                          }}
+                          disabled={updateSlugMutation.isPending}
+                          className="px-4 py-2 rounded-lg transition-colors disabled:opacity-50"
+                          style={{
+                            backgroundColor: theme.colors.surface,
+                            color: theme.colors.textSecondary
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!updateSlugMutation.isPending) {
+                              e.currentTarget.style.backgroundColor = theme.colors.background;
+                              e.currentTarget.style.color = theme.colors.text;
+                            }
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!updateSlugMutation.isPending) {
+                              e.currentTarget.style.backgroundColor = theme.colors.surface;
+                              e.currentTarget.style.color = theme.colors.textSecondary;
+                            }
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setIsEditingSlug(true);
+                        setNewSlug(organization.slug || '');
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg transition-colors"
+                      style={{
+                        backgroundColor: theme.colors.surface,
+                        color: theme.colors.textSecondary
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = theme.colors.background;
+                        e.currentTarget.style.color = theme.colors.text;
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = theme.colors.surface;
+                        e.currentTarget.style.color = theme.colors.textSecondary;
+                      }}
+                    >
+                      <Edit2 className="h-4 w-4" />
+                      Edit URL
+                    </button>
+                  )}
+                </div>
+              </Card>
             </div>
           )}
 
@@ -1158,311 +1161,311 @@ export default function PackagesPage() {
             <div className="mb-4">
               {packages.filter((pkg: any) => {
                 const currentPackageId = currentPackage?.package?.id;
-                return currentPackageId !== undefined && 
-                  (currentPackageId !== pkg.id && 
-                   String(currentPackageId) !== String(pkg.id) &&
-                   Number(currentPackageId) !== Number(pkg.id));
+                return currentPackageId !== undefined &&
+                  (currentPackageId !== pkg.id &&
+                    String(currentPackageId) !== String(pkg.id) &&
+                    Number(currentPackageId) !== Number(pkg.id));
               }).length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {packages.filter((pkg: any) => {
                     const currentPackageId = currentPackage?.package?.id;
-                    return currentPackageId !== undefined && 
-                      (currentPackageId !== pkg.id && 
-                       String(currentPackageId) !== String(pkg.id) &&
-                       Number(currentPackageId) !== Number(pkg.id));
+                    return currentPackageId !== undefined &&
+                      (currentPackageId !== pkg.id &&
+                        String(currentPackageId) !== String(pkg.id) &&
+                        Number(currentPackageId) !== Number(pkg.id));
                   }).map((pkg: any) => {
-                  // Compare package IDs - handle both number and string types
-                  const currentPackageId = currentPackage?.package?.id;
-                  const isCurrentPackage = currentPackageId !== undefined && 
-                    (currentPackageId === pkg.id || 
-                     String(currentPackageId) === String(pkg.id) ||
-                     Number(currentPackageId) === Number(pkg.id));
-                  
-                  return (
-                    <div
-                      key={pkg.id}
-                      className="relative overflow-hidden rounded-xl transition-all duration-300 hover:shadow-xl flex flex-col h-full"
-                      style={isCurrentPackage
-                        ? { 
+                    // Compare package IDs - handle both number and string types
+                    const currentPackageId = currentPackage?.package?.id;
+                    const isCurrentPackage = currentPackageId !== undefined &&
+                      (currentPackageId === pkg.id ||
+                        String(currentPackageId) === String(pkg.id) ||
+                        Number(currentPackageId) === Number(pkg.id));
+
+                    return (
+                      <div
+                        key={pkg.id}
+                        className="relative overflow-hidden rounded-xl transition-all duration-300 hover:shadow-xl flex flex-col h-full"
+                        style={isCurrentPackage
+                          ? {
                             border: `2px solid ${theme.colors.primary}`,
                             background: `linear-gradient(to bottom right, ${theme.colors.primary}33, ${theme.colors.primary}1A)`,
                             boxShadow: `0 10px 15px -3px ${theme.colors.primary}33`,
                             backgroundColor: theme.colors.surface
                           }
-                        : pkg.slug === 'diamond'
-                        ? {
-                            border: `2px solid ${theme.colors.primary}80`,
-                            background: `linear-gradient(to bottom right, ${theme.colors.primary}20, ${theme.colors.primary}10)`,
-                            backgroundColor: theme.colors.surface
-                          }
-                        : { 
-                            border: `2px solid ${theme.colors.border}`,
-                            backgroundColor: theme.colors.surface
-                          }
-                      }
-                      onMouseEnter={(e) => {
-                        if (!isCurrentPackage && pkg.slug !== 'diamond') {
-                          e.currentTarget.style.borderColor = theme.colors.primary;
-                        }
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isCurrentPackage && pkg.slug !== 'diamond') {
-                          e.currentTarget.style.borderColor = theme.colors.border;
-                        }
-                      }}
-                    >
-                      {isCurrentPackage && (
-                        <div className="absolute top-0 right-0 px-3 py-1 text-xs font-semibold rounded-bl-lg text-white" style={{ background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})` }}>
-                          Current
-                        </div>
-                      )}
-                      
-                      <div className="p-6 flex flex-col flex-1">
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <div className="p-2 rounded-lg" style={{ backgroundColor: isCurrentPackage ? theme.colors.primary + '33' : theme.colors.surface }}>
-                                <Package className="h-5 w-5" style={{ color: isCurrentPackage ? theme.colors.primary : theme.colors.textSecondary }} />
-                              </div>
-                              <h3 className="text-xl font-bold" style={{ color: theme.colors.text }}>{pkg.name}</h3>
-                            </div>
-                            {pkg.description && (
-                              <p className="text-sm" style={{ color: theme.colors.textSecondary }}>{pkg.description}</p>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mb-6">
-                          {pkg.price === 0 ? (
-                            <div className="text-center py-4">
-                              <div className="text-5xl font-bold mb-2" style={{ background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                                Free
-                              </div>
-                              <p className="text-sm" style={{ color: theme.colors.textSecondary }}>Forever</p>
-                            </div>
-                          ) : (
-                            <div className="text-center py-4 rounded-xl p-4" style={{ background: `linear-gradient(to bottom right, ${theme.colors.background}, ${theme.colors.surface})`, border: `1px solid ${theme.colors.border}` }}>
-                              <div className="flex items-baseline justify-center gap-2 mb-2 flex-wrap">
-                                <span className="text-5xl font-bold" style={{ background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                                  {isNepal ? formatCurrency(convertUSDToNPR(pkg.price), 'NPR') : formatCurrency(pkg.price, 'USD')}
-                                </span>
-                                <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                                  {isNepal ? (
-                                    <span>({formatCurrency(pkg.price, 'USD')} USD)</span>
-                                  ) : (
-                                    <span>({formatCurrency(convertUSDToNPR(pkg.price), 'NPR')} NPR)</span>
-                                  )}
-                                </span>
-                              </div>
-                              <p className="text-sm font-medium mt-2" style={{ color: theme.colors.textSecondary }}>per month</p>
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="mb-4 space-y-3 flex-1">
-                          <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                            <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                            <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                              <strong style={{ color: theme.colors.text }}>{formatLimit(pkg.base_user_limit)}</strong> users included
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                            <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                            <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                              <strong style={{ color: theme.colors.text }}>{pkg.base_role_limit}</strong> base roles
-                              {pkg.additional_role_limit > 0 && (
-                                <span className="text-xs ml-1" style={{ color: theme.colors.textSecondary, opacity: 0.8 }}>
-                                  (+{pkg.additional_role_limit} additional)
-                                </span>
-                              )}
-                            </span>
-                          </div>
-                          {/* Chat System - show for all packages */}
-                          <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                            {pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
-                              <>
-                                <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                                <span className="text-sm text-green-500">
-                                  <strong>Chat System</strong> included
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <X className="h-5 w-5 text-red-500 flex-shrink-0" />
-                                <span className="text-sm text-red-500">
-                                  <strong>Chat System</strong>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {/* Ticket System - show for all packages */}
-                          <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                            {pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
-                              <>
-                                <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                                <span className="text-sm text-green-500">
-                                  <strong>Ticket System</strong> included
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <X className="h-5 w-5 text-red-500 flex-shrink-0" />
-                                <span className="text-sm text-red-500">
-                                  <strong>Ticket System</strong>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                          {/* Custom Organization URL - show for all packages */}
-                          <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
-                            {pkg.slug === 'basic' || pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
-                              <>
-                                <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
-                                <span className="text-sm text-green-500">
-                                  <strong>Custom Organization URL</strong>
-                                </span>
-                              </>
-                            ) : (
-                              <>
-                                <X className="h-5 w-5 text-red-500 flex-shrink-0" />
-                                <span className="text-sm text-red-500">
-                                  <strong>Custom Organization URL</strong>
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        <div className="mt-auto pt-4">
-                        {(() => {
-                          // Don't show purchase button for freemium
-                          if (pkg.slug === 'freemium') {
-                            return (
-                              <Button variant="secondary" fullWidth disabled leftIcon={<Check className="h-5 w-5" />}>
-                                {isCurrentPackage ? 'Current Package' : 'Default Package'}
-                              </Button>
-                            );
-                          }
-
-                          // Check if this is an upgrade (higher tier) or downgrade (lower tier)
-                          // Higher sort_order = Higher tier (Freemium=1, Basic=2, Platinum=3, Diamond=4)
-                          const currentPackageSortOrder = currentPackage?.package?.sort_order || 999;
-                          const isUpgrade = pkg.sort_order > currentPackageSortOrder;
-                          const isDowngrade = pkg.sort_order < currentPackageSortOrder;
-                          const hasActiveSubscription = currentPackage?.package_expires_at && 
-                            new Date(currentPackage.package_expires_at) > new Date();
-
-                          if (isCurrentPackage) {
-                            return (
-                              <Button variant="secondary" fullWidth disabled leftIcon={<Check className="h-5 w-5" />}>
-                                Current Package
-                              </Button>
-                            );
-                          }
-
-                          // Show upgrade button for higher packages, or if current package expired
-                          if (isUpgrade || !hasActiveSubscription) {
-                            if (!canUpgradePackage) {
-                              return (
-                                <div className="w-full py-3 px-4 font-semibold rounded-lg text-center text-sm" style={{ backgroundColor: theme.colors.surface, color: theme.colors.textSecondary }}>
-                                  Upgrade not available
-                                </div>
-                              );
+                          : pkg.slug === 'diamond'
+                            ? {
+                              border: `2px solid ${theme.colors.primary}80`,
+                              background: `linear-gradient(to bottom right, ${theme.colors.primary}20, ${theme.colors.primary}10)`,
+                              backgroundColor: theme.colors.surface
                             }
-                            return (
-                              <Button
-                                onClick={() => handlePackageUpgrade(pkg)}
-                                disabled={createPackagePaymentMutation.isPending || calculateUpgradePriceMutation.isPending}
-                                variant="primary"
-                                fullWidth
-                                isLoading={createPackagePaymentMutation.isPending || calculateUpgradePriceMutation.isPending}
-                                leftIcon={<CreditCard className="h-5 w-5" />}
-                                style={{
-                                  backgroundColor: theme.colors.primary,
-                                  color: '#ffffff',
-                                }}
-                                onMouseEnter={(e: any) => {
-                                  if (!createPackagePaymentMutation.isPending && !calculateUpgradePriceMutation.isPending) {
-                                    e.currentTarget.style.backgroundColor = theme.colors.secondary;
-                                  }
-                                }}
-                                onMouseLeave={(e: any) => {
-                                  if (!createPackagePaymentMutation.isPending && !calculateUpgradePriceMutation.isPending) {
-                                    e.currentTarget.style.backgroundColor = theme.colors.primary;
-                                  }
-                                }}
-                              >
-                                {isUpgrade && hasActiveSubscription ? 'Upgrade Package' : 'Purchase Package'}
-                              </Button>
-                            );
+                            : {
+                              border: `2px solid ${theme.colors.border}`,
+                              backgroundColor: theme.colors.surface
+                            }
+                        }
+                        onMouseEnter={(e) => {
+                          if (!isCurrentPackage && pkg.slug !== 'diamond') {
+                            e.currentTarget.style.borderColor = theme.colors.primary;
                           }
-
-                          // Show disabled button for downgrades when subscription is active
-                          if (isDowngrade && hasActiveSubscription) {
-                            return (
-                              <Button variant="secondary" fullWidth disabled leftIcon={<X className="h-5 w-5" />}>
-                                Downgrade Not Available
-                              </Button>
-                            );
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isCurrentPackage && pkg.slug !== 'diamond') {
+                            e.currentTarget.style.borderColor = theme.colors.border;
                           }
+                        }}
+                      >
+                        {isCurrentPackage && (
+                          <div className="absolute top-0 right-0 px-3 py-1 text-xs font-semibold rounded-bl-lg text-white" style={{ background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})` }}>
+                            Current
+                          </div>
+                        )}
 
-                          // Default: show purchase button
-                          if (!canUpgradePackage) {
-                            return (
-                              <div className="w-full py-3 px-4 font-semibold rounded-lg text-center text-sm" style={{ backgroundColor: theme.colors.surface, color: theme.colors.textSecondary }}>
-                                Purchase not available
+                        <div className="p-6 flex flex-col flex-1">
+                          <div className="flex items-start justify-between mb-4">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <div className="p-2 rounded-lg" style={{ backgroundColor: isCurrentPackage ? theme.colors.primary + '33' : theme.colors.surface }}>
+                                  <Package className="h-5 w-5" style={{ color: isCurrentPackage ? theme.colors.primary : theme.colors.textSecondary }} />
+                                </div>
+                                <h3 className="text-xl font-bold" style={{ color: theme.colors.text }}>{pkg.name}</h3>
                               </div>
-                            );
-                          }
-                          return (
-                            <button
-                              onClick={() => handlePackageUpgrade(pkg)}
-                              disabled={createPackagePaymentMutation.isPending}
-                              className="w-full py-3 px-4 text-white font-semibold rounded-lg transition-all duration-200 flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-                              style={{ 
-                                background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`
-                              }}
-                              onMouseEnter={(e) => {
-                                if (!createPackagePaymentMutation.isPending) {
-                                  e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.secondary}, ${theme.colors.primary})`;
-                                  e.currentTarget.style.boxShadow = `0 10px 15px -3px ${theme.colors.primary}33`;
-                                }
-                              }}
-                              onMouseLeave={(e) => {
-                                if (!createPackagePaymentMutation.isPending) {
-                                  e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`;
-                                  e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
-                                }
-                              }}
-                            >
-                              {createPackagePaymentMutation.isPending ? (
+                              {pkg.description && (
+                                <p className="text-sm" style={{ color: theme.colors.textSecondary }}>{pkg.description}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mb-6">
+                            {pkg.price === 0 ? (
+                              <div className="text-center py-4">
+                                <div className="text-5xl font-bold mb-2" style={{ background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                  Free
+                                </div>
+                                <p className="text-sm" style={{ color: theme.colors.textSecondary }}>Forever</p>
+                              </div>
+                            ) : (
+                              <div className="text-center py-4 rounded-xl p-4" style={{ background: `linear-gradient(to bottom right, ${theme.colors.background}, ${theme.colors.surface})`, border: `1px solid ${theme.colors.border}` }}>
+                                <div className="flex items-baseline justify-center gap-2 mb-2 flex-wrap">
+                                  <span className="text-5xl font-bold" style={{ background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+                                    {isNepal ? formatCurrency(convertUSDToNPR(pkg.price), 'NPR') : formatCurrency(pkg.price, 'USD')}
+                                  </span>
+                                  <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
+                                    {isNepal ? (
+                                      <span>({formatCurrency(pkg.price, 'USD')} USD)</span>
+                                    ) : (
+                                      <span>({formatCurrency(convertUSDToNPR(pkg.price), 'NPR')} NPR)</span>
+                                    )}
+                                  </span>
+                                </div>
+                                <p className="text-sm font-medium mt-2" style={{ color: theme.colors.textSecondary }}>per month</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="mb-4 space-y-3 flex-1">
+                            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                              <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                              <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
+                                <strong style={{ color: theme.colors.text }}>{formatLimit(pkg.base_user_limit)}</strong> users included
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                              <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                              <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
+                                <strong style={{ color: theme.colors.text }}>{pkg.base_role_limit}</strong> base roles
+                                {pkg.additional_role_limit > 0 && (
+                                  <span className="text-xs ml-1" style={{ color: theme.colors.textSecondary, opacity: 0.8 }}>
+                                    (+{pkg.additional_role_limit} additional)
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                            {/* Chat System - show for all packages */}
+                            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                              {pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
                                 <>
-                                  <Loader2 className="animate-spin h-5 w-5 mr-2" />
-                                  Processing...
+                                  <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                                  <span className="text-sm text-green-500">
+                                    <strong>Chat System</strong> included
+                                  </span>
                                 </>
                               ) : (
                                 <>
-                                  <CreditCard className="h-5 w-5 mr-2" />
-                                  Purchase Package
+                                  <X className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                  <span className="text-sm text-red-500">
+                                    <strong>Chat System</strong>
+                                  </span>
                                 </>
                               )}
-                            </button>
-                          );
-                        })()}
+                            </div>
+                            {/* Ticket System - show for all packages */}
+                            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                              {pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
+                                <>
+                                  <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                                  <span className="text-sm text-green-500">
+                                    <strong>Ticket System</strong> included
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <X className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                  <span className="text-sm text-red-500">
+                                    <strong>Ticket System</strong>
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                            {/* Custom Organization URL - show for all packages */}
+                            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                              {pkg.slug === 'basic' || pkg.slug === 'platinum' || pkg.slug === 'diamond' ? (
+                                <>
+                                  <Check className="h-5 w-5 text-green-500 flex-shrink-0" />
+                                  <span className="text-sm text-green-500">
+                                    <strong>Custom Organization URL</strong>
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <X className="h-5 w-5 text-red-500 flex-shrink-0" />
+                                  <span className="text-sm text-red-500">
+                                    <strong>Custom Organization URL</strong>
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="mt-auto pt-4">
+                            {(() => {
+                              // Don't show purchase button for freemium
+                              if (pkg.slug === 'freemium') {
+                                return (
+                                  <Button variant="secondary" fullWidth disabled leftIcon={<Check className="h-5 w-5" />}>
+                                    {isCurrentPackage ? 'Current Package' : 'Default Package'}
+                                  </Button>
+                                );
+                              }
+
+                              // Check if this is an upgrade (higher tier) or downgrade (lower tier)
+                              // Higher sort_order = Higher tier (Freemium=1, Basic=2, Platinum=3, Diamond=4)
+                              const currentPackageSortOrder = currentPackage?.package?.sort_order || 999;
+                              const isUpgrade = pkg.sort_order > currentPackageSortOrder;
+                              const isDowngrade = pkg.sort_order < currentPackageSortOrder;
+                              const hasActiveSubscription = currentPackage?.package_expires_at &&
+                                new Date(currentPackage.package_expires_at) > new Date();
+
+                              if (isCurrentPackage) {
+                                return (
+                                  <Button variant="secondary" fullWidth disabled leftIcon={<Check className="h-5 w-5" />}>
+                                    Current Package
+                                  </Button>
+                                );
+                              }
+
+                              // Show upgrade button for higher packages, or if current package expired
+                              if (isUpgrade || !hasActiveSubscription) {
+                                if (!canUpgradePackage) {
+                                  return (
+                                    <div className="w-full py-3 px-4 font-semibold rounded-lg text-center text-sm" style={{ backgroundColor: theme.colors.surface, color: theme.colors.textSecondary }}>
+                                      Upgrade not available
+                                    </div>
+                                  );
+                                }
+                                return (
+                                  <Button
+                                    onClick={() => handlePackageUpgrade(pkg)}
+                                    disabled={createPackagePaymentMutation.isPending || calculateUpgradePriceMutation.isPending}
+                                    variant="primary"
+                                    fullWidth
+                                    isLoading={createPackagePaymentMutation.isPending || calculateUpgradePriceMutation.isPending}
+                                    leftIcon={<CreditCard className="h-5 w-5" />}
+                                    style={{
+                                      backgroundColor: theme.colors.primary,
+                                      color: '#ffffff',
+                                    }}
+                                    onMouseEnter={(e: any) => {
+                                      if (!createPackagePaymentMutation.isPending && !calculateUpgradePriceMutation.isPending) {
+                                        e.currentTarget.style.backgroundColor = theme.colors.secondary;
+                                      }
+                                    }}
+                                    onMouseLeave={(e: any) => {
+                                      if (!createPackagePaymentMutation.isPending && !calculateUpgradePriceMutation.isPending) {
+                                        e.currentTarget.style.backgroundColor = theme.colors.primary;
+                                      }
+                                    }}
+                                  >
+                                    {isUpgrade && hasActiveSubscription ? 'Upgrade Package' : 'Purchase Package'}
+                                  </Button>
+                                );
+                              }
+
+                              // Show disabled button for downgrades when subscription is active
+                              if (isDowngrade && hasActiveSubscription) {
+                                return (
+                                  <Button variant="secondary" fullWidth disabled leftIcon={<X className="h-5 w-5" />}>
+                                    Downgrade Not Available
+                                  </Button>
+                                );
+                              }
+
+                              // Default: show purchase button
+                              if (!canUpgradePackage) {
+                                return (
+                                  <div className="w-full py-3 px-4 font-semibold rounded-lg text-center text-sm" style={{ backgroundColor: theme.colors.surface, color: theme.colors.textSecondary }}>
+                                    Purchase not available
+                                  </div>
+                                );
+                              }
+                              return (
+                                <button
+                                  onClick={() => handlePackageUpgrade(pkg)}
+                                  disabled={createPackagePaymentMutation.isPending}
+                                  className="w-full py-3 px-4 text-white font-semibold rounded-lg transition-all duration-200 flex items-center justify-center shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                  style={{
+                                    background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`
+                                  }}
+                                  onMouseEnter={(e) => {
+                                    if (!createPackagePaymentMutation.isPending) {
+                                      e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.secondary}, ${theme.colors.primary})`;
+                                      e.currentTarget.style.boxShadow = `0 10px 15px -3px ${theme.colors.primary}33`;
+                                    }
+                                  }}
+                                  onMouseLeave={(e) => {
+                                    if (!createPackagePaymentMutation.isPending) {
+                                      e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`;
+                                      e.currentTarget.style.boxShadow = '0 4px 6px -1px rgba(0, 0, 0, 0.1)';
+                                    }
+                                  }}
+                                >
+                                  {createPackagePaymentMutation.isPending ? (
+                                    <>
+                                      <Loader2 className="animate-spin h-5 w-5 mr-2" />
+                                      Processing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CreditCard className="h-5 w-5 mr-2" />
+                                      Purchase Package
+                                    </>
+                                  )}
+                                </button>
+                              );
+                            })()}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-8" style={{ color: theme.colors.textSecondary }}>
-                <Card>
-                  No packages available
-                </Card>
-              </div>
-            )}
-          </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-center py-8" style={{ color: theme.colors.textSecondary }}>
+                  <Card>
+                    No packages available
+                  </Card>
+                </div>
+              )}
+            </div>
           )}
 
           {/* Available Features */}
@@ -1492,13 +1495,13 @@ export default function PackagesPage() {
                             <Check className="h-5 w-5" style={{ color: theme.colors.primary }} />
                           )}
                           <span className="px-2 py-1 text-xs font-medium rounded" style={{ backgroundColor: theme.colors.surface, color: theme.colors.textSecondary }}>
-                            {feature.type === 'user_upgrade' 
-                              ? 'User Upgrade' 
+                            {feature.type === 'user_upgrade'
+                              ? 'User Upgrade'
                               : feature.type === 'role_upgrade'
-                              ? 'Role Upgrade'
-                              : feature.type === 'support' || feature.type === 'chat'
-                              ? 'Support'
-                              : 'Feature'}
+                                ? 'Role Upgrade'
+                                : feature.type === 'support' || feature.type === 'chat'
+                                  ? 'Support'
+                                  : 'Feature'}
                           </span>
                         </div>
                       </div>
@@ -1521,19 +1524,9 @@ export default function PackagesPage() {
                               <>
                                 {/* Assume prices are in USD, display both currencies */}
                                 {isNepal ? (
-                                  <>
-                                    {formatCurrency(convertUSDToNPR(feature.price), 'NPR')}
-                                    <span className="text-xs font-normal ml-1" style={{ color: theme.colors.textSecondary }}>
-                                      ({formatCurrency(feature.price, 'USD')})
-                                    </span>
-                                  </>
+                                  formatCurrency(convertUSDToNPR(feature.price), 'NPR')
                                 ) : (
-                                  <>
-                                    {formatCurrency(feature.price, 'USD')}
-                                    <span className="text-xs font-normal ml-1" style={{ color: theme.colors.textSecondary }}>
-                                      ({formatCurrency(convertUSDToNPR(feature.price), 'NPR')})
-                                    </span>
-                                  </>
+                                  formatCurrency(feature.price, 'USD')
                                 )}
                               </>
                             )}
@@ -1573,10 +1566,10 @@ export default function PackagesPage() {
                           </div>
                         )
                       ) : (
-                        <Button 
-                          variant="secondary" 
-                          fullWidth 
-                          className="mt-4" 
+                        <Button
+                          variant="secondary"
+                          fullWidth
+                          className="mt-4"
                           disabled
                           style={{
                             backgroundColor: theme.colors.surface,
@@ -1617,104 +1610,104 @@ export default function PackagesPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            
+
             {/* Item Details */}
             <div className="mb-4 p-4 rounded-lg" style={{ backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
               <p className="text-sm font-medium mb-1" style={{ color: theme.colors.textSecondary }}>Purchasing:</p>
               <p className="text-lg font-semibold mb-3" style={{ color: theme.colors.text }}>
                 {pendingPayment.type === 'package' ? pendingPayment.item.name : pendingPayment.item.name}
               </p>
-              
+
               {/* Subscription Period Selection (only for packages) */}
               {pendingPayment.type === 'package' && pendingPayment.item.price > 0 && (
-                  <div className="mb-4">
-                    <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>Subscription Period</label>
-                    <div className="grid grid-cols-2 gap-2 mb-2">
-                      {(['3_months', '6_months', '1_year', 'custom'] as const).map((period) => (
-                        <button
-                          key={period}
-                          type="button"
-                          onClick={async () => {
-                            setSelectedPeriod(period);
-                            // Recalculate upgrade price when period changes
-                            if (upgradePriceInfo && upgradePriceInfo.can_upgrade) {
-                              try {
-                                const priceInfo = await calculateUpgradePriceMutation.mutateAsync({
-                                  package_id: pendingPayment.item.id,
-                                  period: period,
-                                  custom_months: period === 'custom' ? customMonths : undefined,
-                                });
-                                setUpgradePriceInfo(priceInfo);
-                              } catch (error) {
-                                console.error('Error recalculating upgrade price:', error);
-                              }
+                <div className="mb-4">
+                  <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.textSecondary }}>Subscription Period</label>
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    {(['3_months', '6_months', '1_year', 'custom'] as const).map((period) => (
+                      <button
+                        key={period}
+                        type="button"
+                        onClick={async () => {
+                          setSelectedPeriod(period);
+                          // Recalculate upgrade price when period changes
+                          if (upgradePriceInfo && upgradePriceInfo.can_upgrade) {
+                            try {
+                              const priceInfo = await calculateUpgradePriceMutation.mutateAsync({
+                                package_id: pendingPayment.item.id,
+                                period: period,
+                                custom_months: period === 'custom' ? customMonths : undefined,
+                              });
+                              setUpgradePriceInfo(priceInfo);
+                            } catch (error) {
+                              console.error('Error recalculating upgrade price:', error);
                             }
-                          }}
-                          className="px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all"
-                          style={{
-                            borderColor: selectedPeriod === period ? theme.colors.primary : theme.colors.border,
-                            backgroundColor: selectedPeriod === period ? `${theme.colors.primary}33` : theme.colors.surface,
-                            color: selectedPeriod === period ? theme.colors.text : theme.colors.textSecondary,
-                          }}
-                          onMouseEnter={(e) => {
-                            if (selectedPeriod !== period) {
-                              e.currentTarget.style.borderColor = theme.colors.border;
-                              e.currentTarget.style.backgroundColor = theme.colors.background;
-                            }
-                          }}
-                          onMouseLeave={(e) => {
-                            if (selectedPeriod !== period) {
-                              e.currentTarget.style.borderColor = theme.colors.border;
-                              e.currentTarget.style.backgroundColor = theme.colors.surface;
-                            }
-                          }}
-                        >
-                          {period === '3_months' ? '3 Months' : 
-                           period === '6_months' ? '6 Months (4% off)' :
-                           period === '1_year' ? '1 Year (7.5% off)' :
-                           'Custom'}
-                        </button>
-                      ))}
-                    </div>
-                    {selectedPeriod === 'custom' && (
-                      <div className="mt-2">
-                        <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textSecondary }}>Number of Months</label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={customMonths}
-                          onChange={async (e) => {
-                            const months = Math.max(1, parseInt(e.target.value) || 12);
-                            setCustomMonths(months);
-                            // Recalculate upgrade price when custom months change
-                            if (upgradePriceInfo && upgradePriceInfo.can_upgrade && selectedPeriod === 'custom') {
-                              try {
-                                const priceInfo = await calculateUpgradePriceMutation.mutateAsync({
-                                  package_id: pendingPayment.item.id,
-                                  period: 'custom',
-                                  custom_months: months,
-                                });
-                                setUpgradePriceInfo(priceInfo);
-                              } catch (error) {
-                                console.error('Error recalculating upgrade price:', error);
-                              }
-                            }
-                          }}
-                          className="w-full px-3 py-2 text-sm rounded-lg focus:ring-2 transition-colors"
-                          style={{
-                            backgroundColor: theme.colors.surface,
-                            border: `1px solid ${theme.colors.border}`,
-                            color: theme.colors.text,
-                          }}
-                          onFocus={(e) => {
-                            e.currentTarget.style.borderColor = theme.colors.primary;
-                            e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.primary}33`;
-                          }}
-                          onBlur={(e) => {
+                          }
+                        }}
+                        className="px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all"
+                        style={{
+                          borderColor: selectedPeriod === period ? theme.colors.primary : theme.colors.border,
+                          backgroundColor: selectedPeriod === period ? `${theme.colors.primary}33` : theme.colors.surface,
+                          color: selectedPeriod === period ? theme.colors.text : theme.colors.textSecondary,
+                        }}
+                        onMouseEnter={(e) => {
+                          if (selectedPeriod !== period) {
                             e.currentTarget.style.borderColor = theme.colors.border;
-                            e.currentTarget.style.boxShadow = 'none';
-                          }}
-                        />
+                            e.currentTarget.style.backgroundColor = theme.colors.background;
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (selectedPeriod !== period) {
+                            e.currentTarget.style.borderColor = theme.colors.border;
+                            e.currentTarget.style.backgroundColor = theme.colors.surface;
+                          }
+                        }}
+                      >
+                        {period === '3_months' ? '3 Months' :
+                          period === '6_months' ? '6 Months (4% off)' :
+                            period === '1_year' ? '1 Year (7.5% off)' :
+                              'Custom'}
+                      </button>
+                    ))}
+                  </div>
+                  {selectedPeriod === 'custom' && (
+                    <div className="mt-2">
+                      <label className="block text-xs font-medium mb-1" style={{ color: theme.colors.textSecondary }}>Number of Months</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={customMonths}
+                        onChange={async (e) => {
+                          const months = Math.max(1, parseInt(e.target.value) || 12);
+                          setCustomMonths(months);
+                          // Recalculate upgrade price when custom months change
+                          if (upgradePriceInfo && upgradePriceInfo.can_upgrade && selectedPeriod === 'custom') {
+                            try {
+                              const priceInfo = await calculateUpgradePriceMutation.mutateAsync({
+                                package_id: pendingPayment.item.id,
+                                period: 'custom',
+                                custom_months: months,
+                              });
+                              setUpgradePriceInfo(priceInfo);
+                            } catch (error) {
+                              console.error('Error recalculating upgrade price:', error);
+                            }
+                          }
+                        }}
+                        className="w-full px-3 py-2 text-sm rounded-lg focus:ring-2 transition-colors"
+                        style={{
+                          backgroundColor: theme.colors.surface,
+                          border: `1px solid ${theme.colors.border}`,
+                          color: theme.colors.text,
+                        }}
+                        onFocus={(e) => {
+                          e.currentTarget.style.borderColor = theme.colors.primary;
+                          e.currentTarget.style.boxShadow = `0 0 0 2px ${theme.colors.primary}33`;
+                        }}
+                        onBlur={(e) => {
+                          e.currentTarget.style.borderColor = theme.colors.border;
+                          e.currentTarget.style.boxShadow = 'none';
+                        }}
+                      />
                       {customMonths > 12 && (
                         <p className="mt-1 text-xs font-medium" style={{ color: theme.colors.primary }}>✓ 10% discount applied</p>
                       )}
@@ -1726,7 +1719,7 @@ export default function PackagesPage() {
                       )}
                     </div>
                   )}
-                  
+
                   {/* Price Calculation */}
                   {(() => {
                     const subscription = calculateSubscriptionPrice(
@@ -1771,9 +1764,9 @@ export default function PackagesPage() {
                         <div className="flex items-center justify-between pt-2 mt-2" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
                           <span className="text-base font-semibold" style={{ color: theme.colors.text }}>Final Price:</span>
                           <span className="text-xl font-bold" style={{ color: theme.colors.primary }}>
-                            {selectedGateway === 'stripe'
-                              ? formatCurrency(finalPrice, 'USD')
-                              : formatCurrency(convertUSDToNPR(finalPrice), 'NPR')}
+                            {isNepal
+                              ? formatCurrency(convertUSDToNPR(finalPrice), 'NPR')
+                              : formatCurrency(finalPrice, 'USD')}
                           </span>
                         </div>
                         <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>
@@ -1784,107 +1777,146 @@ export default function PackagesPage() {
                   })()}
                 </div>
               )}
-              
+
               {/* Feature or Package without period */}
               {(pendingPayment.type === 'feature' || (pendingPayment.type === 'package' && pendingPayment.item.price === 0)) && (
                 <div className="flex items-baseline gap-2">
                   <span className="text-2xl font-bold" style={{ color: theme.colors.primary }}>
-                    {selectedGateway === 'stripe' 
-                      ? formatCurrency(pendingPayment.item.price, 'USD')
-                      : formatCurrency(convertUSDToNPR(pendingPayment.item.price), 'NPR')}
-                  </span>
-                  <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                    {selectedGateway === 'stripe' 
-                      ? `(${formatCurrency(convertUSDToNPR(pendingPayment.item.price), 'NPR')})`
-                      : `(${formatCurrency(pendingPayment.item.price, 'USD')})`}
+                    {isNepal
+                      ? formatCurrency(convertUSDToNPR(pendingPayment.item.price), 'NPR')
+                      : formatCurrency(pendingPayment.item.price, 'USD')}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Payment Methods */}
-            <div className="space-y-3 mb-4">
-              <label 
-                className="flex items-start p-5 border-2 rounded-xl cursor-pointer transition-all"
-                style={{
-                  borderColor: selectedGateway === 'esewa' ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: selectedGateway === 'esewa' ? `${theme.colors.primary}33` : theme.colors.surface,
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedGateway !== 'esewa') {
-                    e.currentTarget.style.borderColor = theme.colors.border;
-                    e.currentTarget.style.backgroundColor = theme.colors.background;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedGateway !== 'esewa') {
-                    e.currentTarget.style.borderColor = theme.colors.border;
-                    e.currentTarget.style.backgroundColor = theme.colors.surface;
-                  }
-                }}
-              >
-                <input
-                  type="radio"
-                  name="gateway"
-                  value="esewa"
-                  checked={selectedGateway === 'esewa'}
-                  onChange={(e) => setSelectedGateway(e.target.value as 'esewa' | 'stripe')}
-                  className="mt-1 mr-4 w-5 h-5"
-                  style={{ accentColor: theme.colors.primary }}
-                />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-lg font-semibold" style={{ color: theme.colors.text }}>eSewa</span>
-                    <span className="text-xs font-medium px-3 py-1 rounded-full border" style={{ backgroundColor: `${theme.colors.primary}33`, color: theme.colors.primary, borderColor: `${theme.colors.primary}4D` }}>NPR</span>
-                  </div>
-                  <p className="text-sm" style={{ color: theme.colors.textSecondary }}>Pay with eSewa wallet (Nepalese Rupees)</p>
-                  <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>Includes 13% VAT</p>
-                </div>
-                {selectedGateway === 'esewa' && (
-                  <Check className="w-5 h-5 ml-2" style={{ color: theme.colors.primary }} />
-                )}
-              </label>
+            <div className="flex flex-wrap gap-3 mb-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar justify-center">
+              {/* Localized Gateways Selection */}
+              {isNepal ? (
+                <>
+                  <label
+                    className="flex flex-col items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all w-[140px] text-center"
+                    style={{
+                      borderColor: selectedGateway === 'esewa' ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: selectedGateway === 'esewa' ? `${theme.colors.primary}15` : theme.colors.surface,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="gateway"
+                      value="esewa"
+                      checked={selectedGateway === 'esewa'}
+                      onChange={(e) => setSelectedGateway('esewa')}
+                      className="hidden"
+                    />
+                    <div className="mb-2 p-2 rounded-lg bg-white shadow-sm flex items-center justify-center h-12 w-12 overflow-hidden">
+                      <span className="font-black text-green-600">eSewa</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block" style={{ color: theme.colors.text }}>eSewa</span>
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border" style={{ color: theme.colors.primary, borderColor: `${theme.colors.primary}33` }}>NPR</span>
+                    </div>
+                  </label>
 
-              <label 
-                className="flex items-start p-5 border-2 rounded-xl cursor-pointer transition-all"
-                style={{
-                  borderColor: selectedGateway === 'stripe' ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: selectedGateway === 'stripe' ? `${theme.colors.primary}33` : theme.colors.surface,
-                }}
-                onMouseEnter={(e) => {
-                  if (selectedGateway !== 'stripe') {
-                    e.currentTarget.style.borderColor = theme.colors.border;
-                    e.currentTarget.style.backgroundColor = theme.colors.background;
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (selectedGateway !== 'stripe') {
-                    e.currentTarget.style.borderColor = theme.colors.border;
-                    e.currentTarget.style.backgroundColor = theme.colors.surface;
-                  }
-                }}
-              >
-                <input
-                  type="radio"
-                  name="gateway"
-                  value="stripe"
-                  checked={selectedGateway === 'stripe'}
-                  onChange={(e) => setSelectedGateway(e.target.value as 'esewa' | 'stripe')}
-                  className="mt-1 mr-4 w-5 h-5"
-                  style={{ accentColor: theme.colors.primary }}
-                />
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-lg font-semibold" style={{ color: theme.colors.text }}>Stripe</span>
-                    <span className="text-xs font-medium px-3 py-1 rounded-full border" style={{ backgroundColor: `${theme.colors.primary}33`, color: theme.colors.primary, borderColor: `${theme.colors.primary}4D` }}>USD</span>
-                  </div>
-                  <p className="text-sm" style={{ color: theme.colors.textSecondary }}>Pay with credit/debit card (US Dollars)</p>
-                  <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>Visa, Mastercard, Amex accepted</p>
-                </div>
-                {selectedGateway === 'stripe' && (
-                  <Check className="w-5 h-5 ml-2" style={{ color: theme.colors.primary }} />
-                )}
-              </label>
+                  <label
+                    className="flex flex-col items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all w-[140px] text-center"
+                    style={{
+                      borderColor: selectedGateway === 'khalti' ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: selectedGateway === 'khalti' ? `${theme.colors.primary}15` : theme.colors.surface,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="gateway"
+                      value="khalti"
+                      checked={selectedGateway === 'khalti'}
+                      onChange={(e) => setSelectedGateway('khalti')}
+                      className="hidden"
+                    />
+                    <div className="mb-2 p-2 rounded-lg bg-white shadow-sm flex items-center justify-center h-12 w-12 overflow-hidden">
+                      <span className="font-black text-purple-600">Khalti</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block" style={{ color: theme.colors.text }}>Khalti</span>
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border" style={{ color: theme.colors.primary, borderColor: `${theme.colors.primary}33` }}>NPR</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className="flex flex-col items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all w-[140px] text-center"
+                    style={{
+                      borderColor: selectedGateway === 'connect_ips' ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: selectedGateway === 'connect_ips' ? `${theme.colors.primary}15` : theme.colors.surface,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="gateway"
+                      value="connect_ips"
+                      checked={selectedGateway === 'connect_ips'}
+                      onChange={(e) => setSelectedGateway('connect_ips')}
+                      className="hidden"
+                    />
+                    <div className="mb-2 p-2 rounded-lg bg-white shadow-sm flex items-center justify-center h-12 w-12 overflow-hidden">
+                      <span className="font-black text-blue-600">Connect</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block" style={{ color: theme.colors.text }}>ConnectIPS</span>
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border" style={{ color: theme.colors.primary, borderColor: `${theme.colors.primary}33` }}>NPR</span>
+                    </div>
+                  </label>
+                </>
+              ) : (
+                <>
+                  <label
+                    className="flex flex-col items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all w-[140px] text-center"
+                    style={{
+                      borderColor: selectedGateway === 'stripe' ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: selectedGateway === 'stripe' ? `${theme.colors.primary}15` : theme.colors.surface,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="gateway"
+                      value="stripe"
+                      checked={selectedGateway === 'stripe'}
+                      onChange={(e) => setSelectedGateway('stripe')}
+                      className="hidden"
+                    />
+                    <div className="mb-2 p-2 rounded-lg bg-white shadow-sm flex items-center justify-center h-12 w-12 overflow-hidden">
+                      <span className="font-bold text-gray-800">Stripe</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block" style={{ color: theme.colors.text }}>Stripe / Card</span>
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border" style={{ color: theme.colors.primary, borderColor: `${theme.colors.primary}33` }}>USD</span>
+                    </div>
+                  </label>
+
+                  <label
+                    className="flex flex-col items-center justify-center p-3 border-2 rounded-xl cursor-pointer transition-all w-[140px] text-center"
+                    style={{
+                      borderColor: selectedGateway === 'paypal' ? theme.colors.primary : theme.colors.border,
+                      backgroundColor: selectedGateway === 'paypal' ? `${theme.colors.primary}15` : theme.colors.surface,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="gateway"
+                      value="paypal"
+                      checked={selectedGateway === 'paypal'}
+                      onChange={(e) => setSelectedGateway('paypal')}
+                      className="hidden"
+                    />
+                    <div className="mb-2 p-2 rounded-lg bg-white shadow-sm flex items-center justify-center h-12 w-12 overflow-hidden">
+                      <span className="font-bold text-blue-800">PayPal</span>
+                    </div>
+                    <div>
+                      <span className="text-sm font-bold block" style={{ color: theme.colors.text }}>PayPal</span>
+                      <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded border" style={{ color: theme.colors.primary, borderColor: `${theme.colors.primary}33` }}>USD</span>
+                    </div>
+                  </label>
+                </>
+              )}
             </div>
 
             {/* Action Buttons */}

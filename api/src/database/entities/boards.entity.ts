@@ -1,3 +1,8 @@
+export enum BoardPrivacy {
+    PRIVATE = 'private',
+    TEAM = 'team',
+    ORG = 'org',
+}
 import {
     Entity,
     PrimaryGeneratedColumn,
@@ -37,6 +42,13 @@ export class Board {
 
     @Column({ type: 'varchar', length: 255 })
     name: string;
+
+    @Column({
+        type: 'enum',
+        enum: BoardPrivacy,
+        default: BoardPrivacy.TEAM,
+    })
+    privacy: BoardPrivacy;
 
     @Column({ type: 'text', nullable: true })
     description: string | null;

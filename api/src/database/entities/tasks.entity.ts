@@ -16,8 +16,11 @@ import { User } from './users.entity';
 import { Project } from './projects.entity';
 import { Epic } from './epics.entity';
 import { Ticket } from './tickets.entity';
+import { Board } from './boards.entity';
+import { BoardColumn } from './board_columns.entity';
 import { TaskComment } from './task_comments.entity';
 import { TaskAttachment } from './task_attachments.entity';
+import { TaskChecklistItem } from '../../../marketplace/shared/mero-board/entities/task-checklist-item.entity';
 
 export enum TaskStatus {
   TODO = 'todo',
@@ -57,6 +60,20 @@ export class Task {
   @ManyToOne(() => Project, { nullable: true, onDelete: 'CASCADE' })
   @JoinColumn({ name: 'project_id' })
   project: Project | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  board_id: string | null;
+
+  @ManyToOne(() => Board, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'board_id' })
+  board: Board | null;
+
+  @Column({ type: 'uuid', nullable: true })
+  column_id: string | null;
+
+  @ManyToOne(() => BoardColumn, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'column_id' })
+  column: BoardColumn | null;
 
   @Column({ type: 'uuid', nullable: true })
   epic_id: string | null;
@@ -107,6 +124,16 @@ export class Task {
   })
   assignees: User[];
 
+  @Column({ type: 'uuid', nullable: true })
+  parent_task_id: string | null;
+
+  @ManyToOne(() => Task, (task) => task.sub_tasks, { nullable: true, onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'parent_task_id' })
+  parent_task: Task | null;
+
+  @OneToMany(() => Task, (task) => task.parent_task)
+  sub_tasks: Task[];
+
   @Column({ type: 'date', nullable: true })
   due_date: Date | null;
 
@@ -115,6 +142,15 @@ export class Task {
 
   @Column({ type: 'int', nullable: true })
   actual_hours: number | null;
+
+  @Column({ name: 'original_estimate_minutes', type: 'int', default: 0 })
+  original_estimate_minutes: number;
+
+  @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
+  completed_at: Date | null;
+
+  @Column({ name: 'crm_deal_id', type: 'uuid', nullable: true })
+  crm_deal_id: string | null;
 
   @Column({ type: 'text', array: true, default: () => 'ARRAY[]::text[]' })
   tags: string[];
@@ -133,5 +169,8 @@ export class Task {
 
   @OneToMany(() => TaskAttachment, (attachment) => attachment.task)
   attachments: TaskAttachment[];
+
+  @OneToMany(() => TaskChecklistItem, (item) => item.task)
+  checklist_items: TaskChecklistItem[];
 }
 

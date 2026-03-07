@@ -7,11 +7,19 @@ export interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   showValue?: boolean;
   size?: 'sm' | 'md' | 'lg';
   variant?: 'default' | 'success' | 'warning' | 'danger';
+  smartColor?: boolean;
 }
 
 export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
-  ({ className, value = 0, max = 100, showValue = false, size = 'md', variant = 'default', ...props }, ref) => {
+  ({ className, value = 0, max = 100, showValue = false, size = 'md', variant = 'default', smartColor = false, ...props }, ref) => {
     const percentage = Math.min(Math.max((value / max) * 100, 0), 100);
+
+    const getSmartColor = () => {
+      if (percentage <= 30) return 'bg-primary-600';
+      if (percentage <= 70) return 'bg-green-600';
+      if (percentage <= 90) return 'bg-yellow-500';
+      return 'bg-red-600';
+    };
 
     const sizes: Record<'sm' | 'md' | 'lg', string> = {
       sm: 'h-1',
@@ -38,7 +46,7 @@ export const Progress = forwardRef<HTMLDivElement, ProgressProps>(
           <div
             className={cn(
               'h-full transition-all duration-300 ease-in-out',
-              variants[variant]
+              smartColor ? getSmartColor() : variants[variant]
             )}
             style={{ width: `${percentage}%` }}
           />

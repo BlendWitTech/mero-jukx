@@ -6,19 +6,21 @@ import { useAppContext } from '../contexts/AppContext';
 import { useQuery } from '@tanstack/react-query';
 import api from '@frontend/services/api';
 import { useAuthStore } from '@frontend/store/authStore';
+import { Card, CardHeader, CardTitle, CardContent } from '@shared/frontend';
 
-interface DashboardStats {
+interface DashboardData {
     totalProducts: number;
     totalWarehouses: number;
     lowStockItems: number;
     totalStockValue: number;
+    categoryDistribution?: Record<string, number>;
 }
 
 export default function DashboardPage() {
     const { theme } = useTheme();
     const { buildHref } = useAppContext();
     const { organization } = useAuthStore();
-    const { data: dashboardData, isLoading: loading } = useQuery({
+    const { data: dashboardData, isLoading: loading } = useQuery<DashboardData>({
         queryKey: ['inventory', 'dashboard', organization?.id],
         queryFn: async () => {
             const response = await api.get(`/inventory/reports/dashboard`);
@@ -38,7 +40,7 @@ export default function DashboardPage() {
     });
 
 
-    const stats: DashboardStats = {
+    const stats: DashboardData = {
         totalProducts: dashboardData?.totalProducts || 0,
         totalWarehouses: dashboardData?.totalWarehouses || 0,
         lowStockItems: dashboardData?.lowStockItems || 0,
@@ -169,54 +171,63 @@ export default function DashboardPage() {
                 })}
             </div>
 
-            {/* Quick Actions & Recent Activity Container */}
+            {/* Dashboard Visuals */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                {/* Quick Actions */}
-                <div className="lg:col-span-1 space-y-6">
-                    <h2 className="text-2xl font-bold px-1" style={{ color: theme.colors.text }}>
-                        Quick Actions
-                    </h2>
-                    <div className="flex flex-col gap-4">
-                        {quickActions.map((action) => {
-                            const Icon = action.icon;
-                            return (
-                                <Link key={action.title} to={action.link} className="group">
-                                    <div
-                                        className="p-5 flex items-center justify-between transition-all duration-300 hover:shadow-xl shadow-lg backdrop-blur-sm rounded-xl overflow-hidden hover:-translate-y-1"
-                                        style={{
-                                            background: `linear-gradient(to bottom right, ${theme.colors.surface}, ${theme.colors.background})`,
-                                            border: `1px solid ${theme.colors.border}80`
-                                        }}
-                                        onMouseEnter={(e) => {
-                                            e.currentTarget.style.borderColor = `${action.color}80`;
-                                            e.currentTarget.style.boxShadow = `0 10px 15px -3px ${action.color}33`;
-                                        }}
-                                        onMouseLeave={(e) => {
-                                            e.currentTarget.style.borderColor = `${theme.colors.border}80`;
-                                            e.currentTarget.style.boxShadow = '';
-                                        }}
-                                    >
-                                        <div className="flex items-center gap-5">
-                                            <div
-                                                className="p-3 rounded-xl shadow-md group-hover:scale-110 transition-transform duration-300"
-                                                style={{ backgroundColor: `${action.color}15` }}
-                                            >
-                                                <Icon className="h-6 w-6" style={{ color: action.color }} />
-                                            </div>
-                                            <span className="text-lg font-bold" style={{ color: theme.colors.text }}>
-                                                {action.title}
-                                            </span>
-                                        </div>
-                                        <div className="w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                            style={{ backgroundColor: `${action.color}15` }}>
-                                            <Plus className="h-5 w-5" style={{ color: action.color }} />
-                                        </div>
-                                    </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                </div>
+                {/* Stock Distribution Chart */}
+                <Card className="lg:col-span-1" style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border }}>
+                    <CardHeader>
+                        <CardTitle className="text-xl font-bold" style={{ color: theme.colors.text }}>Stock Distribution</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-center py-6">
+                        {dashboardData?.categoryDistribution ? (
+                            <div className="relative w-64 h-64">
+                                <svg viewBox="0 0 36 36" className="w-full h-full transform -rotate-90">
+                                    {(() => {
+                                        let cumulativePercent = 0;
+                                        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+                                        return Object.entries(dashboardData.categoryDistribution).map(([category, value], index) => {
+                                            const percent = (Number(value) / stats.totalProducts) * 100;
+                                            const strokeDasharray = `${percent} 100`;
+                                            const strokeDashoffset = -cumulativePercent;
+                                            cumulativePercent += percent;
+                                            return (
+                                                <circle
+                                                    key={category}
+                                                    cx="18" cy="18" r="15.915"
+                                                    fill="transparent"
+                                                    stroke={colors[index % colors.length]}
+                                                    strokeWidth="3.8"
+                                                    strokeDasharray={strokeDasharray}
+                                                    strokeDashoffset={strokeDashoffset}
+                                                    className="transition-all duration-500 hover:stroke-width-5 cursor-help"
+                                                >
+                                                    <title>{category}: {value} ({percent.toFixed(1)}%)</title>
+                                                </circle>
+                                            );
+                                        });
+                                    })()}
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                    <span className="text-3xl font-black" style={{ color: theme.colors.text }}>{stats.totalProducts}</span>
+                                    <span className="text-[10px] uppercase font-black opacity-40">Total Skus</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="h-64 flex items-center justify-center opacity-40">
+                                <Activity className="h-12 w-12" />
+                            </div>
+                        )}
+                        <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-2 w-full">
+                            {Object.entries(dashboardData?.categoryDistribution || {}).slice(0, 4).map(([category, value], index) => (
+                                <div key={category} className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{ backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'][index % 5] }} />
+                                    <span className="text-xs truncate" style={{ color: theme.colors.text }}>{category}</span>
+                                    <span className="text-[10px] ml-auto font-bold opacity-40">{value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
 
                 {/* Recent Activity */}
                 <div className="lg:col-span-2 space-y-6">

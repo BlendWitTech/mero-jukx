@@ -12,16 +12,14 @@ import { User } from './users.entity';
 import { Organization } from './organizations.entity';
 
 @Entity('sessions')
-@Index(['user_id'])
-@Index(['organization_id'])
-@Index(['refresh_token'], { unique: true })
-@Index(['expires_at'])
+@Index('IDX_SESSIONS_USER_ID', ['user_id'])
+@Index('IDX_SESSIONS_ORG_ID', ['organization_id'])
+@Index('IDX_SESSIONS_EXPIRES_AT', ['expires_at'])
 export class Session {
   @PrimaryColumn({ type: 'varchar', length: 255 })
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   user_id: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
@@ -29,7 +27,6 @@ export class Session {
   user: User;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   organization_id: string | null;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE', nullable: true })

@@ -14,7 +14,10 @@ import {
   OrganizationPackageFeature,
   OrganizationPackageFeatureStatus,
 } from '../database/entities/organization_package_features.entity';
-import { Organization } from '../database/entities/organizations.entity';
+import {
+  Organization,
+  OrganizationType,
+} from '../database/entities/organizations.entity';
 import {
   OrganizationMember,
   OrganizationMemberStatus,
@@ -48,7 +51,7 @@ export class PackagesService {
     private rolePermissionRepository: Repository<RolePermission>,
     private dataSource: DataSource,
     private auditLogsService: AuditLogsService,
-  ) {}
+  ) { }
 
   async getPackages(organizationId?: string): Promise<Package[]> {
     const packages = await this.packageRepository.find({
@@ -87,10 +90,11 @@ export class PackagesService {
     organizationId: string,
   ): Promise<{
     package: Package;
-    current_limits: { users: number; roles: number };
+    current_limits: { users: number; roles: number; branches: number };
     active_features: OrganizationPackageFeature[];
     package_expires_at: Date | null;
     package_auto_renew: boolean;
+    branch_usage: number;
   }> {
     // Verify user is member
     const membership = await this.memberRepository.findOne({
@@ -123,7 +127,6 @@ export class PackagesService {
       },
       relations: ['feature'],
     });
-
     // Ensure package is loaded - if package_id exists but package is null, reload it
     let packageData = organization.package;
     if (organization.package_id && !packageData) {
@@ -132,15 +135,30 @@ export class PackagesService {
       });
     }
 
+    // Count branches (including MAIN)
+    let rootOrgId = organizationId;
+    if (organization.org_type === OrganizationType.BRANCH && organization.parent_id) {
+      rootOrgId = organization.parent_id;
+    }
+
+    const branchUsage = await this.organizationRepository.count({
+      where: [
+        { id: rootOrgId },
+        { parent_id: rootOrgId, org_type: OrganizationType.BRANCH },
+      ],
+    });
+
     return {
       package: packageData,
       current_limits: {
         users: organization.user_limit,
         roles: organization.role_limit,
+        branches: organization.branch_limit || packageData?.base_branch_limit || 1,
       },
       active_features: activeFeatures,
       package_expires_at: organization.package_expires_at,
       package_auto_renew: organization.package_auto_renew,
+      branch_usage: branchUsage,
     };
   }
 
@@ -151,7 +169,7 @@ export class PackagesService {
   ): Promise<{
     message: string;
     package: Package;
-    new_limits: { users: number; roles: number };
+    new_limits: { users: number; roles: number; branches: number };
     prorated_credit?: number;
     final_price?: number;
   }> {
@@ -349,6 +367,7 @@ export class PackagesService {
         package_id: dto.package_id,
         user_limit: newLimits.users,
         role_limit: newLimits.roles,
+        branch_limit: newLimits.branches,
         package_expires_at: expirationDate,
         has_upgraded_from_freemium: hasUpgradedFromFreemium,
       },
@@ -910,7 +929,7 @@ export class PackagesService {
 
     // Calculate upgrade price
     const period = dto.period || SubscriptionPeriod.THREE_MONTHS;
-    
+
     // Calculate prorated credit from total current cost (package + features)
     const upgradePriceCalc = calculateUpgradePrice(
       totalCurrentMonthlyPrice,
@@ -939,12 +958,12 @@ export class PackagesService {
     const algorithm = 'aes-256-cbc';
     const key = crypto.scryptSync(encryptionKey, 'salt', 32);
     const iv = crypto.randomBytes(16);
-    
+
     const cipher = crypto.createCipheriv(algorithm, key, iv);
     const credentialsJson = JSON.stringify(credentials);
     let encrypted = cipher.update(credentialsJson, 'utf8', 'hex');
     encrypted += cipher.final('hex');
-    
+
     // Return IV + encrypted data (IV is needed for decryption)
     return iv.toString('hex') + ':' + encrypted;
   }
@@ -1021,7 +1040,7 @@ export class PackagesService {
 
     // Update auto-renewal setting
     organization.package_auto_renew = enabled;
-    
+
     // Encrypt and save credentials if provided
     if (enabled && credentials) {
       organization.package_auto_renew_credentials = this.encryptCredentials(credentials);
@@ -1029,7 +1048,7 @@ export class PackagesService {
       // Clear credentials when disabling
       organization.package_auto_renew_credentials = null;
     }
-    
+
     await this.organizationRepository.save(organization);
 
     // Create audit log
@@ -1059,7 +1078,7 @@ export class PackagesService {
   private async calculateLimits(
     organizationId: string,
     packageId: number,
-  ): Promise<{ users: number; roles: number }> {
+  ): Promise<{ users: number; roles: number; branches: number }> {
     // Get package
     const pkg = await this.packageRepository.findOne({
       where: { id: packageId },
@@ -1073,6 +1092,8 @@ export class PackagesService {
     let userLimit = pkg.base_user_limit;
     // Role limit = base roles + additional roles from package
     let roleLimit = pkg.base_role_limit + pkg.additional_role_limit;
+    // Branch limit = base branches from package
+    let branchLimit = pkg.base_branch_limit;
 
     // Get active features for organization
     const activeFeatures = await this.orgFeatureRepository.find({
@@ -1105,7 +1126,7 @@ export class PackagesService {
       }
     }
 
-    return { users: userLimit, roles: roleLimit };
+    return { users: userLimit, roles: roleLimit, branches: branchLimit };
   }
 
   private async updateOrganizationLimits(organizationId: string): Promise<void> {
@@ -1121,13 +1142,14 @@ export class PackagesService {
     const limits = await this.calculateLimits(organizationId, organization.package_id);
     organization.user_limit = limits.users;
     organization.role_limit = limits.roles;
+    organization.branch_limit = limits.branches;
 
     await this.organizationRepository.save(organization);
   }
 
   private async validateDowngrade(
     organizationId: string,
-    newLimits: { users: number; roles: number },
+    newLimits: { users: number; roles: number; branches: number },
   ): Promise<void> {
     // Check current user count
     const currentUsers = await this.memberRepository.count({
@@ -1156,6 +1178,20 @@ export class PackagesService {
     if (newLimits.roles !== -1 && currentCustomRoles > newLimits.roles) {
       throw new BadRequestException(
         `Cannot downgrade: Current custom role count (${currentCustomRoles}) exceeds new limit (${newLimits.roles}). Default roles (Organization Owner and Admin) are not counted. Please remove custom roles first.`,
+      );
+    }
+
+    // Check current branch count
+    const currentBranches = await this.organizationRepository.count({
+      where: {
+        parent_id: organizationId,
+        org_type: OrganizationType.BRANCH,
+      },
+    });
+
+    if (newLimits.branches !== -1 && currentBranches > newLimits.branches) {
+      throw new BadRequestException(
+        `Cannot downgrade: Current branch count (${currentBranches}) exceeds new limit (${newLimits.branches}). Please remove branches first.`,
       );
     }
   }
@@ -1242,5 +1278,32 @@ export class PackagesService {
         }
       }
     }
+  }
+
+  async repairBranchLimits(organizationId: string): Promise<{ message: string; results: any[] }> {
+    // This is a repair tool to fix mismatched branch limits
+    const organizations = await this.organizationRepository.find({
+      where: { org_type: OrganizationType.MAIN },
+      relations: ['package'],
+    });
+
+    const repaired = [];
+    for (const org of organizations) {
+      if (org.package && org.branch_limit !== org.package.base_branch_limit) {
+        const oldLimit = org.branch_limit;
+        org.branch_limit = org.package.base_branch_limit;
+        await this.organizationRepository.save(org);
+        repaired.push({
+          name: org.name,
+          old_limit: oldLimit,
+          new_limit: org.branch_limit,
+        });
+      }
+    }
+
+    return {
+      message: `Repaired branch limits for ${repaired.length} organizations`,
+      results: repaired,
+    };
   }
 }

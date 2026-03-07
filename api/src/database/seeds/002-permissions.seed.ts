@@ -78,6 +78,12 @@ export async function seedPermissions(dataSource: DataSource): Promise<void> {
       category: 'organizations',
       description: 'Manage organization settings including MFA',
     },
+    {
+      name: 'Create Branches',
+      slug: 'organizations.create_branch',
+      category: 'organizations',
+      description: 'Create child branches for the organization',
+    },
 
     // Package permissions
     {

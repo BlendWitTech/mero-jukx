@@ -42,12 +42,12 @@ docker-compose ps
 
 7. **Initialize the database**
 ```bash
-npm run db:migrate
+npm run db:init
 ```
 
 8. **Seed the database**
 ```bash
-npm run db:seed
+npm run seed
 ```
 
 ## Troubleshooting

@@ -80,30 +80,16 @@ async function bootstrap() {
   );
 
   // CORS configuration
-  const frontendUrl = configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
-  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
-
-  // In development, allow multiple origins (localhost, IPs, and dev.merojugx.com)
-  const allowedOrigins = nodeEnv === 'development'
-    ? [
-      'http://localhost:3001',
-      'http://127.0.0.1:3001',
-      'http://dev.merojugx.com:3001',
-      'http://mero-crm.dev.merojugx.com:3001',
-      /^http:\/\/.*\.dev\.merojugx\.com(:\d+)?$/, // Allow all subdomains on any port
-      /^http:\/\/(\d+\.){3}\d+(:\d+)?$/, // Allow IP addresses on any port
-    ]
-    : [frontendUrl];
-
   app.enableCors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps or curl requests)
+      const { getAllowedOrigins } = require('./common/utils/cors.utils');
+      const allowed = getAllowedOrigins(configService);
+
       if (!origin) {
         return callback(null, true);
       }
 
-      // Check if origin matches any allowed origin
-      const isAllowed = allowedOrigins.some((allowedOrigin) => {
+      const isAllowed = allowed.some((allowedOrigin) => {
         if (typeof allowedOrigin === 'string') {
           return origin === allowedOrigin;
         }
@@ -144,10 +130,16 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = configService.get<number>('PORT', 3000);
-  await app.listen(port);
-
-  console.log(`🚀 Application is running on: http://localhost:${port}`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+  try {
+    await app.listen(port, '0.0.0.0');
+    console.log(`\n🚀 Application is running on: http://localhost:${port}`);
+    console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
+    console.log(`🏥 Health Check: http://localhost:${port}/api/v1/health`);
+    console.log(`🌐 Bound to: 0.0.0.0\n`);
+  } catch (error: any) {
+    console.error(`❌ Failed to start application on port ${port}:`, error?.message || error);
+    process.exit(1);
+  }
 }
 
 bootstrap();

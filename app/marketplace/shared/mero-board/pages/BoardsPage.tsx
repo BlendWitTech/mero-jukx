@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Modal, Textarea, Loading, Select } from '@shared/frontend';
 import api from '@frontend/services/api';
-import { Plus, Kanban, MoreVertical, Trash2, Edit2, ArrowLeft } from 'lucide-react';
+import { Plus, Kanban, Trash2, Edit2, ArrowLeft, Star, Globe, Lock, Users as UsersIcon } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import toast from '@shared/frontend/hooks/useToast';
@@ -16,6 +16,7 @@ interface Board {
     type: 'KANBAN' | 'SCRUM' | 'LIST';
     color: string | null;
     created_at: string;
+    privacy?: 'private' | 'team' | 'org';
 }
 
 export default function BoardsPage() {
@@ -32,6 +33,7 @@ export default function BoardsPage() {
         description: '',
         type: 'KANBAN',
         color: '#3b82f6',
+        privacy: 'team' as 'private' | 'team' | 'org',
     });
     const [boardToDelete, setBoardToDelete] = useState<string | null>(null);
 
@@ -39,7 +41,7 @@ export default function BoardsPage() {
 
     // Fetch boards
     const { data: boardsData, isLoading } = useQuery<{ data: Board[] }>({
-        queryKey: ['boards', appSlug, projectId], // Add projectId to query key
+        queryKey: ['boards', appSlug, projectId],
         queryFn: async () => {
             const endpoint = projectId
                 ? `/boards?projectId=${projectId}`
@@ -48,7 +50,17 @@ export default function BoardsPage() {
             return response.data;
         },
     });
-    const boards = boardsData?.data || []; // Handle data wrapper
+    const boards = boardsData?.data || [];
+
+    // Fetch favorite boards
+    const { data: favoriteBoards = [] } = useQuery<Board[]>({
+        queryKey: ['board-favorites'],
+        queryFn: async () => {
+            const response = await api.get('/boards/favorites/list');
+            return response.data;
+        },
+    });
+    const favoriteBoardIds = new Set((favoriteBoards as Board[]).map((b) => b.id));
 
     // Create board mutation
     const createBoardMutation = useMutation({
@@ -71,7 +83,7 @@ export default function BoardsPage() {
     // Update board mutation
     const updateBoardMutation = useMutation({
         mutationFn: async ({ id, data }: { id: string; data: any }) => {
-            const response = await api.put(`/boards/${id}`, data);
+            const response = await api.patch(`/boards/${id}`, data);
             return response.data;
         },
         onSuccess: () => {
@@ -82,6 +94,33 @@ export default function BoardsPage() {
         },
         onError: (error: any) => {
             toast.error(error.response?.data?.message || 'Failed to update board');
+        },
+    });
+
+    // Pin / unpin board mutations
+    const pinBoardMutation = useMutation({
+        mutationFn: async (boardId: string) => {
+            await api.post(`/boards/${boardId}/pin`);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['board-favorites'] });
+            toast.success('Board added to favorites');
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to add to favorites');
+        },
+    });
+
+    const unpinBoardMutation = useMutation({
+        mutationFn: async (boardId: string) => {
+            await api.post(`/boards/${boardId}/unpin`);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['board-favorites'] });
+            toast.success('Board removed from favorites');
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to remove from favorites');
         },
     });
 
@@ -106,6 +145,7 @@ export default function BoardsPage() {
             description: '',
             type: 'KANBAN',
             color: '#3b82f6',
+            privacy: 'team',
         });
         setSelectedBoard(null);
     };
@@ -120,6 +160,15 @@ export default function BoardsPage() {
         updateBoardMutation.mutate({ id: selectedBoard.id, data: boardForm });
     };
 
+    const handleToggleFavorite = (e: React.MouseEvent, board: Board) => {
+        e.stopPropagation();
+        if (favoriteBoardIds.has(board.id)) {
+            unpinBoardMutation.mutate(board.id);
+        } else {
+            pinBoardMutation.mutate(board.id);
+        }
+    };
+
     const openEditModal = (board: Board) => {
         setSelectedBoard(board);
         setBoardForm({
@@ -127,6 +176,7 @@ export default function BoardsPage() {
             description: board.description || '',
             type: board.type as any,
             color: board.color || '#3b82f6',
+            privacy: board.privacy || 'team',
         });
         setShowEditModal(true);
     };
@@ -138,6 +188,78 @@ export default function BoardsPage() {
             </div>
         );
     }
+
+    const favoritesList = boards.filter((b) => favoriteBoardIds.has(b.id));
+    const nonFavoritesList = boards.filter((b) => !favoriteBoardIds.has(b.id));
+
+    const renderBoardCard = (board: Board) => {
+        const isFav = favoriteBoardIds.has(board.id);
+        return (
+            <Card
+                key={board.id}
+                className="hover:shadow-lg transition-all duration-200 cursor-pointer group"
+                style={{
+                    backgroundColor: theme.colors.surface,
+                    borderColor: theme.colors.border,
+                    borderLeft: `4px solid ${board.color || theme.colors.primary}`,
+                }}
+                onClick={() => navigate(`${board.id}`, { relative: 'route' })}
+            >
+                <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                        <CardTitle className="text-xl flex items-center gap-2" style={{ color: theme.colors.text }}>
+                            {board.name}
+                            {isFav && <Star className="h-4 w-4 text-yellow-500" fill="currentColor" />}
+                        </CardTitle>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                                onClick={(e) => handleToggleFavorite(e, board)}
+                                className={`p-1.5 rounded transition-colors ${isFav ? 'text-yellow-500' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'}`}
+                                title={isFav ? 'Remove from favorites' : 'Add to favorites'}
+                            >
+                                <Star className="h-4 w-4" fill={isFav ? 'currentColor' : 'none'} />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); openEditModal(board); }}
+                                className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
+                                style={{ color: theme.colors.textSecondary }}
+                            >
+                                <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={(e) => { e.stopPropagation(); setBoardToDelete(board.id); }}
+                                className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
+                            >
+                                <Trash2 className="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
+                    {board.description && (
+                        <p className="text-sm mt-1 line-clamp-2" style={{ color: theme.colors.textSecondary }}>
+                            {board.description}
+                        </p>
+                    )}
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center justify-between text-sm" style={{ color: theme.colors.textSecondary }}>
+                        <div className="flex items-center gap-2">
+                            <span className="capitalize px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.background }}>
+                                {board.type.toLowerCase()}
+                            </span>
+                            {board.privacy && (
+                                <span className="flex items-center gap-1 opacity-70" title={`Privacy: ${board.privacy}`}>
+                                    {board.privacy === 'private' ? <Lock className="h-3 w-3" /> :
+                                        board.privacy === 'org' ? <Globe className="h-3 w-3" /> :
+                                            <UsersIcon className="h-3 w-3" />}
+                                </span>
+                            )}
+                        </div>
+                        <span>{new Date(board.created_at).toLocaleDateString()}</span>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    };
 
     return (
         <div className="h-full w-full p-6" style={{ backgroundColor: theme.colors.background }}>
@@ -161,15 +283,30 @@ export default function BoardsPage() {
                 </div>
                 <Button
                     onClick={() => setShowCreateModal(true)}
-                    style={{
-                        backgroundColor: theme.colors.primary,
-                        color: '#ffffff',
-                    }}
+                    style={{ backgroundColor: theme.colors.primary, color: '#ffffff' }}
                 >
                     <Plus className="mr-2 h-4 w-4" />
                     Create Board
                 </Button>
             </div>
+
+            {/* Favorites Section */}
+            {favoritesList.length > 0 && (
+                <div className="mb-8">
+                    <h2 className="text-lg font-semibold mb-3 flex items-center gap-2" style={{ color: theme.colors.text }}>
+                        <Star className="h-5 w-5 text-yellow-500" fill="currentColor" />
+                        Favorites
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {favoritesList.map(renderBoardCard)}
+                    </div>
+                    {nonFavoritesList.length > 0 && (
+                        <div className="mt-6 pt-6 border-t" style={{ borderColor: theme.colors.border }}>
+                            <h2 className="text-lg font-semibold mb-3" style={{ color: theme.colors.text }}>All Boards</h2>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {boards.length === 0 ? (
                 <Card style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border }}>
@@ -179,13 +316,7 @@ export default function BoardsPage() {
                         <p className="mb-4" style={{ color: theme.colors.textSecondary }}>
                             Create your first board to start organizing tickets
                         </p>
-                        <Button
-                            onClick={() => setShowCreateModal(true)}
-                            style={{
-                                backgroundColor: theme.colors.primary,
-                                color: '#ffffff',
-                            }}
-                        >
+                        <Button onClick={() => setShowCreateModal(true)} style={{ backgroundColor: theme.colors.primary, color: '#ffffff' }}>
                             <Plus className="mr-2 h-4 w-4" />
                             Create Board
                         </Button>
@@ -193,62 +324,7 @@ export default function BoardsPage() {
                 </Card>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {boards.map((board: Board) => (
-                        <Card
-                            key={board.id}
-                            className="hover:shadow-lg transition-all duration-200 cursor-pointer group"
-                            style={{
-                                backgroundColor: theme.colors.surface,
-                                borderColor: theme.colors.border,
-                                borderLeft: `4px solid ${board.color || theme.colors.primary}`,
-                            }}
-                            onClick={() => navigate(`${board.id}`, { relative: 'route' })}
-                        >
-                            <CardHeader className="pb-2">
-                                <div className="flex justify-between items-start">
-                                    <CardTitle className="text-xl" style={{ color: theme.colors.text }}>
-                                        {board.name}
-                                    </CardTitle>
-                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                openEditModal(board);
-                                            }}
-                                            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800"
-                                            style={{ color: theme.colors.textSecondary }}
-                                        >
-                                            <Edit2 className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setBoardToDelete(board.id);
-                                            }}
-                                            className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-500"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
-                                </div>
-                                {board.description && (
-                                    <p className="text-sm mt-1 line-clamp-2" style={{ color: theme.colors.textSecondary }}>
-                                        {board.description}
-                                    </p>
-                                )}
-                            </CardHeader>
-                            <CardContent>
-                                <div className="flex items-center justify-between text-sm" style={{ color: theme.colors.textSecondary }}>
-                                    <span className="capitalize px-2 py-0.5 rounded" style={{ backgroundColor: theme.colors.background }}>
-                                        {board.type.toLowerCase()}
-                                    </span>
-                                    <span>
-                                        {new Date(board.created_at).toLocaleDateString()}
-                                    </span>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
+                    {(favoritesList.length > 0 ? nonFavoritesList : boards).map(renderBoardCard)}
                 </div>
             )}
 
@@ -297,6 +373,21 @@ export default function BoardsPage() {
                                 { value: 'KANBAN', label: 'Kanban' },
                                 { value: 'SCRUM', label: 'Scrum' },
                                 { value: 'LIST', label: 'List' },
+                            ]}
+                            theme={theme}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium mb-2" style={{ color: theme.colors.text }}>
+                            Privacy
+                        </label>
+                        <Select
+                            value={boardForm.privacy}
+                            onChange={(e) => setBoardForm({ ...boardForm, privacy: e.target.value as any })}
+                            options={[
+                                { value: 'private', label: 'Private (Only you)' },
+                                { value: 'team', label: 'Team (All workspace members)' },
+                                { value: 'org', label: 'Organization (All org members)' },
                             ]}
                             theme={theme}
                         />

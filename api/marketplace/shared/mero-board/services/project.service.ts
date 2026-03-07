@@ -7,6 +7,8 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Project, ProjectStatus } from '../../../../src/database/entities/projects.entity';
+import { Board, BoardType } from '../../../../src/database/entities/boards.entity';
+import { BoardColumn } from '../../../../src/database/entities/board_columns.entity';
 import { WorkspaceMember, WorkspaceRole } from '../entities/workspace-member.entity';
 import { CreateProjectDto } from '../dto/create-project.dto';
 import { UpdateProjectDto } from '../dto/update-project.dto';
@@ -19,9 +21,13 @@ export class ProjectService {
   constructor(
     @InjectRepository(Project)
     private projectRepository: Repository<Project>,
+    @InjectRepository(Board)
+    private boardRepository: Repository<Board>,
+    @InjectRepository(BoardColumn)
+    private columnRepository: Repository<BoardColumn>,
     @InjectRepository(WorkspaceMember)
     private memberRepository: Repository<WorkspaceMember>,
-  ) {}
+  ) { }
 
   async createProject(
     userId: string,
@@ -51,7 +57,42 @@ export class ProjectService {
       status: createDto.status || ProjectStatus.PLANNING,
     });
 
-    return this.projectRepository.save(project);
+    const savedProject = await this.projectRepository.save(project);
+
+    // Create a default Kanban board for the project
+    const board = this.boardRepository.create({
+      name: `${savedProject.name} Board`,
+      organization_id: organizationId,
+      created_by: userId,
+      type: BoardType.KANBAN,
+      project_id: savedProject.id, // Linking back if possible, though Board entity uses BoardProject
+    });
+
+    const savedBoard = await this.boardRepository.save(board);
+
+    // Update project with board_id
+    savedProject.board_id = savedBoard.id;
+    await this.projectRepository.save(savedProject);
+
+    // Create default columns
+    const defaultColumns = [
+      { name: 'To Do', position: 1 },
+      { name: 'In Progress', position: 2 },
+      { name: 'Review', position: 3 },
+      { name: 'Done', position: 4 },
+    ];
+
+    const columns = defaultColumns.map((col) =>
+      this.columnRepository.create({
+        ...col,
+        board_id: savedBoard.id,
+        organizationId: organizationId,
+      }),
+    );
+
+    await this.columnRepository.save(columns);
+
+    return savedProject;
   }
 
   async getProjects(

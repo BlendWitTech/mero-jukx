@@ -20,6 +20,7 @@ import { AppSlug } from '../../../../../src/common/decorators/app-slug.decorator
 import { CurrentUser } from '@common/decorators/current-user.decorator';
 import { ClientsService } from '../services/clients.service';
 import { CreateClientDto, UpdateClientDto } from '../dto/client.dto';
+import { CreateContactDto, UpdateContactDto } from '../dto/contact.dto';
 
 @ApiTags('CRM - Clients')
 @Controller('crm/clients')
@@ -39,6 +40,18 @@ export class ClientsController {
         @Body() createClientDto: CreateClientDto,
     ) {
         return this.clientsService.create(userId, organizationId, createClientDto);
+    }
+
+    @Post('bulk')
+    @Permissions('crm.clients.create')
+    @ApiOperation({ summary: 'Bulk create clients' })
+    @ApiResponse({ status: 201, description: 'Clients created successfully' })
+    async bulkCreate(
+        @CurrentUser('userId') userId: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() createClientDtos: CreateClientDto[],
+    ) {
+        return this.clientsService.bulkCreate(userId, organizationId, createClientDtos);
     }
 
     @Get()
@@ -109,5 +122,48 @@ export class ClientsController {
         @CurrentUser('organizationId') organizationId: string,
     ) {
         return this.clientsService.restore(id, organizationId);
+    }
+
+    // Contact Management Endpoints
+    @Get(':id/contacts')
+    @Permissions('crm.clients.view')
+    @ApiOperation({ summary: 'Get all contacts for a client' })
+    async getContacts(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+    ) {
+        return this.clientsService.getContacts(id, organizationId);
+    }
+
+    @Post('contacts')
+    @Permissions('crm.clients.edit')
+    @ApiOperation({ summary: 'Add a contact to a client' })
+    async addContact(
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() dto: CreateContactDto,
+    ) {
+        return this.clientsService.addContact(organizationId, dto);
+    }
+
+    @Put('contacts/:id')
+    @Permissions('crm.clients.edit')
+    @ApiOperation({ summary: 'Update a contact' })
+    async updateContact(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() dto: UpdateContactDto,
+    ) {
+        return this.clientsService.updateContact(id, organizationId, dto);
+    }
+
+    @Delete('contacts/:id')
+    @HttpCode(HttpStatus.NO_CONTENT)
+    @Permissions('crm.clients.edit')
+    @ApiOperation({ summary: 'Remove a contact' })
+    async removeContact(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+    ) {
+        await this.clientsService.removeContact(id, organizationId);
     }
 }

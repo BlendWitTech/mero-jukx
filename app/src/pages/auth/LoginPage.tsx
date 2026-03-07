@@ -84,7 +84,7 @@ export default function LoginPage() {
   const [tempToken, setTempToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState('');
   const [requiresOrgSelection, setRequiresOrgSelection] = useState(false);
-  const [availableOrganizations, setAvailableOrganizations] = useState<Array<{ id: string; name: string; slug: string; role: string }>>([]);
+  const [availableOrganizations, setAvailableOrganizations] = useState<Array<{ id: string; name: string; slug: string; role: string; org_type?: string }>>([]);
   const [loginCredentials, setLoginCredentials] = useState<{ email: string; password?: string; mfaCode?: string } | null>(null);
   const [loginMode, setLoginMode] = useState<'email' | 'password' | 'mfa'>('email');
   const [email, setEmail] = useState('');
@@ -378,7 +378,7 @@ export default function LoginPage() {
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
 
         if (statusCode === 401) {
-          errorMessage = 'Invalid email or password. Please try again.';
+          errorMessage = ((!errorMessage || errorMessage.includes('Request failed')) ? 'Invalid email or password. Please try again.' : errorMessage);
         } else if (statusCode === 403) {
           errorMessage = 'You do not have permission to access this account.';
         } else if (statusCode === 400) {
@@ -490,7 +490,7 @@ export default function LoginPage() {
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
 
         if (statusCode === 401) {
-          errorMessage = 'Invalid email or password. Please try again.';
+          errorMessage = ((!errorMessage || errorMessage.includes('Request failed')) ? 'Invalid email or password. Please try again.' : errorMessage);
         } else if (statusCode === 403) {
           errorMessage = 'You do not have permission to access this account.';
         } else {
@@ -614,7 +614,10 @@ export default function LoginPage() {
         const statusMatch = errorMessage.match(/status code (\d+)/i);
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
         if (statusCode === 401) {
-          errorMessage = 'Invalid email or password. Please try again.';
+          // Keep the message from backend if available, otherwise use default
+          if (!errorMessage || errorMessage.includes('Request failed')) {
+            errorMessage = 'Invalid email or password. Please try again.';
+          }
         } else {
           errorMessage = 'Login failed. Please try again.';
         }
@@ -673,7 +676,10 @@ export default function LoginPage() {
         const statusMatch = errorMessage.match(/status code (\d+)/i);
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
         if (statusCode === 401) {
-          errorMessage = 'Invalid 2FA code. Please try again.';
+          // Keep the message from backend if available, otherwise use default
+          if (!errorMessage || errorMessage.includes('Request failed')) {
+            errorMessage = 'Invalid 2FA code. Please try again.';
+          }
         } else {
           errorMessage = 'Invalid 2FA code. Please check your authenticator app.';
         }
@@ -759,7 +765,19 @@ export default function LoginPage() {
                   }}
                 >
                   <div className="flex flex-col items-start w-full">
-                    <div className="font-semibold" style={{ color: theme.colors.text }}>{org.name}</div>
+                    <div className="flex items-center justify-between w-full">
+                      <div className="font-semibold" style={{ color: theme.colors.text }}>{org.name}</div>
+                      {org.org_type === 'MAIN' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full border bg-blue-500/10 text-blue-500 border-blue-500/20">
+                          Master Account
+                        </span>
+                      )}
+                      {org.org_type === 'BRANCH' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full border bg-green-500/10 text-green-500 border-green-500/20">
+                          Branch
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>Role: {org.role}</div>
                   </div>
                 </Button>

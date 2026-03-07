@@ -1,254 +1,307 @@
-# Mero Jugx - Nepal's Complete Business Operating System 🇳🇵
+# Mero Jugx — Nepal's Business Operating System
 
-> **नेपाली व्यापारको लागि पूर्ण डिजिटल समाधान** | The all-in-one ERP platform built specifically for Nepali businesses
-
-Mero Jugx is a **multi-tenant ERP platform** designed from the ground up for Nepal's business environment. Unlike generic international ERPs, we handle Nepal's unique requirements: SSF (Social Security Fund) compliance, Nepal Labour Act 2074, VAT 13%, eSewa/Khalti payments, and Nepali fiscal year (Shrawan-Ashadh).
+Mero Jugx is a **multi-tenant ERP SaaS platform** for Nepal, bundling CRM, Inventory, Accounting, HR, Khata, Project Management, CMS, Social, Ticketing, and Chat under one subscription. It features unified authentication, role-based access, and Nepal-specific compliance.
 
 ---
 
-## 🎯 Why Mero Jugx?
+## 🚀 Applications & Features
 
-**Built for Nepal, by understanding Nepal:**
-- ✅ **SSF Compliance**: Automatic 11% employee + 20% employer contribution calculation
-- ✅ **Nepal Labour Act 2074**: Pre-configured leave types (Casual 12 days, Sick 12 days, Maternity 98 days, Puja leave)
-- ✅ **Local Payments**: Native eSewa and Khalti integration for subscriptions and invoicing
-- ✅ **VAT 13%**: IRD-compliant invoice generation with proper tax calculations
-- ✅ **Multi-Branch**: Support for businesses with multiple locations (Kathmandu HQ + Pokhara branch)
-- ✅ **Nepali Fiscal Year**: Shrawan 1 to Ashadh 31 accounting periods
-- ✅ **Multi-Tenant**: Complete data isolation - each organization sees only their data
-
----
-
-## 🏢 Core Modules
-
-### 1. **Organization Hub** (Multi-Tenant Foundation)
-Every business gets their own isolated workspace with:
-- Organization profile (PAN/VAT, fiscal year, currency NPR)
-- Multi-branch management (HQ + regional offices)
-- Dynamic role-based access control (not just Admin/User)
-- Organization branding (logo, colors, custom CSS/JS)
-- **Data Isolation**: `organization_id` on every table ensures complete privacy
-
-### 2. **HR & Payroll** (Nepal-Specific)
-The most comprehensive HR solution for Nepal:
-- **Employee Management**: Citizenship, PAN, bank account, document storage
-- **Attendance**: Manual entry + biometric device integration
-- **Leave Management**: All Nepal Labour Act 2074 leave types pre-configured
-- **Payroll Engine**:
-  - SSF: Employee 11% + Employer 20% auto-calculation
-  - CIT (Corporate Income Tax) and TDS (Tax Deducted at Source) slabs
-  - Bank payment files (NIC Asia, NABIL, HBL formats)
-- **Compliance Documents**:
-  - Payslips in Nepali format
-  - SSF challan PDFs
-  - TDS certificates
-
-### 3. **CRM & Sales**
-Manage your customer relationships and sales pipeline:
-- **Lead Management**: Track prospects from first contact to conversion
-- **Deal Pipeline**: Kanban-style deal tracking with stages
-- **Client Database**: Complete customer profiles with contact history
-- **Quotations**: Professional quote generation with VAT
-- **Invoicing**: IRD-compliant invoices with VAT 13%
-- **Payment Tracking**: Record payments against invoices
-
-### 4. **Inventory Management**
-Multi-warehouse inventory control:
-- **Product Catalog**: SKU, barcode, pricing, stock levels
-- **Warehouse Management**: Multiple locations, stock transfers
-- **Stock Adjustments**: Track inventory movements
-- **Purchase Orders**: Supplier management and ordering
-- **Reports**: Stock valuation, movement history, low stock alerts
-
-### 5. **Accounting & Finance**
-Nepal Chart of Accounts compliant:
-- **General Ledger**: Double-entry bookkeeping
-- **Accounts Payable/Receivable**: Track what you owe and are owed
-- **Bank Reconciliation**: Match transactions with bank statements
-- **Financial Reports**: Balance Sheet, P&L, Cash Flow
-- **VAT Returns**: Generate VAT reports for IRD filing
-
-### 6. **Project Management**
-Kanban-style project tracking:
-- **Boards**: Organize work into projects
-- **Tasks**: Assign, track, and complete work items
-- **Time Tracking**: Log hours against tasks
-- **Collaboration**: Comments, attachments, mentions
+| App                | Status              | Key Features |
+|--------------------|--------------------|--------------|
+| **Mero CRM**       | ✅ Production Ready | Leads, Deals, Clients, Pipeline, Invoices, Quotes, Activities, Reports, Lead Scoring, Automation |
+| **Mero Inventory** | ✅ Production Ready | Products, Warehouses, Stock, POs, GRN, Serial/Batch, Backorders, Commission, Audit, Aging Analysis |
+| **Mero Accounting**| ✅ Production Ready | Chart of Accounts, Journal Entries, Invoices, Fixed Assets, Budgets, Banking, Tax/TDS, Excise, Year-End Closing |
+| **Mero Board**     | ✅ Production Ready | Kanban, Gantt, Projects, Tasks, Tickets, Calendar, WIP, Privacy, Import/Export |
+| **Mero HR**        | ⚠️ Beta            | Employees, Departments, Attendance, Payroll, Leave, Shifts, Recruitment, Performance, Training, Exit Management |
+| **Mero Khata**     | ⚠️ Beta            | Ledger, Bank Reconciliation, Invoicing, VAT, Reports, WhatsApp Sharing |
+| **Mero CMS**       | ✅ Production Ready | Pages, Posts, Media, Forms, Website Builder, SEO, E-commerce |
+| **Mero Social**    | 🔧 In Progress      | Communication, Channels, Direct Messages, Announcements |
+| **Ticket System**  | 🔧 In Progress      | Ticket creation, assignment, SLA, escalation, reporting |
+| **Chat System**    | 🔧 In Progress      | Direct/group chat, file sharing, notifications, admin chat |
 
 ---
 
-## 💳 Payment Integration
+## 🏗️ Architecture & Tech Stack
 
-### eSewa (Nepal's #1 Digital Wallet)
-- Subscription payments for SaaS billing
-- Customer invoice payments
-- Automatic payment verification
-- Refund processing
+See [ARCHITECTURE.md](ARCHITECTURE.md) for diagrams and details.
 
-### Khalti
-- Alternative payment gateway
-- Server-side verification
-- Webhook support for real-time updates
-
----
-
-## 🛠️ Technology Stack
-
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| **Backend** | NestJS (Node v18) | Modular architecture, TypeScript safety |
-| **Frontend** | React 18 + Vite | Fast development, modern UI |
-| **Database** | PostgreSQL 15 | ACID compliance, JSON support, proven reliability |
-| **ORM** | TypeORM | Type-safe queries, migration management |
-| **Real-time** | Socket.io | Live chat, notifications |
-| **Queue** | BullMQ (Redis) | Async job processing (payroll, emails) |
-| **Multi-Tenancy** | Row-Level Security | `organization_id` on every table |
+| Layer         | Technology |
+|---------------|------------|
+| **API**       | NestJS 10, TypeScript, TypeORM |
+| **Database**  | PostgreSQL 15 |
+| **Cache**     | Redis 7 |
+| **Frontend**  | React 18, Vite, TypeScript, Tailwind CSS |
+| **State**     | Zustand, React Query |
+| **Auth**      | JWT, bcrypt, MFA (TOTP) |
+| **Email**     | Nodemailer (SMTP) |
+| **Payments**  | eSewa, ConnectIPS, PayPal, IME Pay |
+| **Infra**     | Docker, Nginx, Docker Compose |
 
 ---
 
-## ⚡ Quick Start
+## 📝 Roadmap & Progress
+
+See [Task_List.md](Task_List.md) for a detailed, prioritized breakdown of all features, modules, and completion status. Major remaining work:
+
+- Mobile App (React Native/Flutter)
+- Cross-app data integration (CRM, Inventory, Accounting, HR, CMS)
+- Ticket & Chat systems
+- Admin dashboard & controls
+- Testing, documentation, Nepal localization
+
+---
+
+## 🛠️ Local Development & Setup
 
 ### Prerequisites
-- Node.js v18+
-- Docker Desktop (recommended) or PostgreSQL 15 + Redis
+- Docker Desktop (recommended for easiest setup)
+- Node.js 18+
+- Git
 
-### 1. Clone and Setup
+### Quick Start (Docker)
+
 ```bash
-git clone https://github.com/BlendWitTech/mero-jugx.git
+# 1. Clone the repo
+git clone https://github.com/your-org/mero-jugx.git
 cd mero-jugx
-npm run setup  # Interactive setup wizard
+
+# 2. Setup environment
+cp .env.example .env
+# Or run: bash scripts/create-env.sh
+# Edit .env with your SMTP, DB, JWT, and payment secrets
+
+# 3. Start all services (API, frontend, DB, Redis)
+docker compose up --build
+
+# 4. Initialize database (first time only)
+docker compose exec api npm run db:init
+
+# 5. Visit the app
+open http://localhost:3001
 ```
 
-### 2. Initialize Database
+### Manual Setup (No Docker)
+
+See [Developer_Guide.md](Developer_Guide.md) and run:
+
 ```bash
-npm run db:init  # Creates schema, runs migrations, seeds data
-```
+# 1. Install dependencies
+npm install
+cd app && npm install && cd ..
 
-### 3. Start Development Server
-```bash
-npm start  # Interactive launcher
-# Select: Development → Full Stack
-```
+# 2. Setup environment
+cp .env.example .env
+# Edit .env with your DB, SMTP, JWT, payment secrets
 
-- **Frontend**: http://localhost:3001
-- **Backend API**: http://localhost:3000
-- **API Docs**: http://localhost:3000/api
+# 3. Start PostgreSQL and Redis locally
+# 4. Initialize database
+npm run db:init
+
+# 5. Start servers
+npm run start:dev
+cd app && npm run dev
+```
 
 ---
 
-## 📂 Project Structure
+## 🧑‍💻 Contributing & Branching
+
+- See [Developer_Guide.md](Developer_Guide.md) for coding standards, commit conventions, and workflow
+- Branching strategy: [BRANCH_STRATEGY.md](.github/BRANCH_STRATEGY.md)
+- CI/CD pipeline: [CI_CD_SETUP.md](.github/CI_CD_SETUP.md)
+- Collaborator access: [COLLABORATOR_ACCESS.md](.github/COLLABORATOR_ACCESS.md)
+
+---
+
+## 🛡️ Admin & Security
+
+- Admin dashboard: system health, user/app stats, error logs, feature toggles
+- User management: invite, suspend, assign roles, audit logs
+- App management: enable/disable apps per org, manage subscriptions
+- Security: IP whitelisting, 2FA, session management, access logs
+- Support tools: impersonate user, manage tickets/chats
+
+---
+
+## 📚 Documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): System diagrams, module breakdown
+- [DATABASE.md](DATABASE.md): Entity and migration documentation
+- [Api.md](Api.md): API endpoints and conventions
+- [Task_List.md](Task_List.md): Roadmap, progress, priorities
+- [Developer_Guide.md](Developer_Guide.md): Setup, workflow, troubleshooting
+- [shared/README.md](shared/README.md): Shared code usage
+
+---
+
+## ❓ Troubleshooting
+
+- If Docker reset does not remove all containers/volumes, run:
+	- `docker compose down -v`
+	- `docker volume prune`
+- For manual DB/Redis setup, see [setup-manual.sh](scripts/setup-manual.sh)
+- For full reset, use `bash scripts/reset-all.sh` (removes everything, including Docker volumes)
+
+---
+
+## 🏁 Ready to get started?
+
+1. Clone the repo and follow the setup above
+2. Check [Task_List.md](Task_List.md) for current progress and priorities
+3. See [Developer_Guide.md](Developer_Guide.md) for coding and contribution guidelines
+4. Join the team and help build Nepal’s best business platform!
+
+# Services running at:
+# Frontend: http://localhost:3001
+# API:      http://localhost:3000/api/v1
+# Swagger:  http://localhost:3000/api/docs
+```
+
+### Development (without Docker)
+
+```bash
+# Start PostgreSQL + Redis via Docker, run API + App locally
+docker compose up postgres redis -d
+
+# API
+cd api && npm install && npm run start:dev
+
+# Frontend
+cd app && npm install && npm run dev
+```
+
+---
+
+## Project Structure
 
 ```
 mero-jugx/
-├── api/                    # NestJS Backend
-│   ├── src/
-│   │   ├── auth/          # JWT, 2FA, sessions
-│   │   ├── organizations/ # Multi-tenant org management
-│   │   ├── hr/            # HR & Payroll (Nepal-specific)
-│   │   ├── crm/           # CRM & Sales
-│   │   ├── inventory/     # Inventory management
-│   │   ├── accounting/    # Finance & accounting
-│   │   ├── database/      # Entities, migrations, seeds
-│   │   └── ...
-│   └── marketplace/       # Modular apps (CRM, Inventory, etc.)
-├── app/                   # React Frontend
-│   ├── src/
-│   │   ├── pages/        # Route components
-│   │   ├── components/   # UI components
-│   │   └── store/        # State management
-│   └── marketplace/      # App-specific frontends
-├── scripts/              # Automation scripts
-└── docker-compose.yml    # PostgreSQL + Redis
+├── api/                    # NestJS backend
+│   ├── src/                # Core: auth, orgs, users, packages, payments
+│   ├── marketplace/        # Per-app modules
+│   │   ├── organization/   # mero-crm, mero-inventory, mero-accounting, mero-hr, mero-khata, mero-cms
+│   │   └── shared/         # mero-board, mero-social
+│   └── Dockerfile
+├── app/                    # React 18 frontend
+│   ├── src/                # Core shell (auth, org switcher, dashboard)
+│   ├── marketplace/        # Per-app UIs (mirrors api/marketplace structure)
+│   └── Dockerfile
+├── shared/                 # Shared frontend components and types
+│   ├── frontend/components/ # 32+ reusable UI components
+│   └── common/             # Shared TypeScript types
+├── scripts/                # Setup and utility scripts
+├── nginx/                  # Nginx reverse proxy config
+└── docker-compose.yml      # Full stack orchestration
 ```
 
 ---
 
-## 🇳🇵 Nepal-Specific Features
+## Environment Variables
 
-### SSF (Social Security Fund) Compliance
-- Automatic contribution calculation (Employee 11%, Employer 20%)
-- SSF challan generation
-- Monthly SSF reports
+### Backend (`api/.env` or root `.env`)
 
-### Nepal Labour Act 2074
-- Pre-configured leave types with correct entitlements
-- Maternity leave (98 days paid)
-- Puja leave calculations
-- Festival bonus calculations
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `NODE_ENV` | ✅ | `development` or `production` |
+| `PORT` | ✅ | API port (default: 3000) |
+| `JWT_SECRET` | ✅ | Min 32-char random string |
+| `JWT_EXPIRES_IN` | ✅ | Access token TTL (e.g. `15m`) |
+| `REFRESH_TOKEN_EXPIRES_IN` | ✅ | Refresh token TTL (e.g. `7d`) |
+| `DB_HOST` | ✅ | PostgreSQL host |
+| `DB_PORT` | ✅ | PostgreSQL port (default: 5432) |
+| `DB_USER` | ✅ | PostgreSQL username |
+| `DB_PASSWORD` | ✅ | PostgreSQL password |
+| `DB_NAME` | ✅ | Database name (default: `mero_jugx`) |
+| `REDIS_HOST` | ✅ | Redis host |
+| `REDIS_PORT` | | Redis port (default: 6379) |
+| `REDIS_PASSWORD` | | Redis password |
+| `SMTP_HOST` | ✅ | SMTP server |
+| `SMTP_PORT` | ✅ | SMTP port (587 or 465) |
+| `SMTP_USER` | ✅ | SMTP username |
+| `SMTP_PASS` | ✅ | SMTP password |
+| `SMTP_FROM` | ✅ | From address |
+| `FRONTEND_URL` | ✅ | Frontend base URL for email links |
 
-### IRD (Inland Revenue Department) Compliance
-- VAT 13% invoice generation
-- TDS certificate generation
-- VAT return reports
-- PAN/VAT validation
+### Frontend (`app/.env`)
 
-### Nepali Fiscal Year
-- Shrawan 1 to Ashadh 31 accounting periods
-- Nepali date support (BS - Bikram Sambat)
-- Festival calendar integration
-
----
-
-## 📖 Documentation
-
-- [**Setup Guide**](SETUP.md) - Detailed installation & troubleshooting
-- [**Architecture**](ARCHITECTURE.md) - System design & multi-tenancy
-- [**Database Schema**](DATABASE.md) - Complete schema reference
-- [**Scripts Reference**](SCRIPTS.md) - CLI tools & commands
-- [**Deployment**](DEPLOYMENT.md) - Production deployment guide
-- [**Payment Integration**](PAYMENT.md) - eSewa & Khalti setup
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_URL` | API base URL (e.g. `http://localhost:3000/api/v1`) |
+| `VITE_APP_NAME` | App display name |
 
 ---
 
-## 🚀 Roadmap
+## Database
 
-### Phase 1: Foundation (Current)
-- [x] Multi-tenant architecture
-- [x] Organization management
-- [x] Role-based access control
-- [x] App-specific permissions
-- [ ] Multi-branch support
+- **95 entities** across 9 domains
+- **9 consolidated migrations** (run automatically on startup)
+- **7 seed files** (packages, permissions, roles, chart-of-accounts)
+- Multi-tenant isolation via `organization_id` on every table
 
-### Phase 2: Payments & Billing
-- [ ] eSewa integration (API v2)
-- [ ] Khalti integration
-- [ ] Subscription management
-- [ ] VAT invoice generation
-
-### Phase 3: HR & Payroll
-- [ ] Employee management
-- [ ] Attendance tracking
-- [ ] Leave management (Nepal Labour Act)
-- [ ] Payroll engine (SSF, CIT, TDS)
-- [ ] Bank payment files
-- [ ] Compliance documents
-
-### Phase 4: Business Modules
-- [x] CRM & Sales
-- [x] Inventory Management
-- [ ] Accounting & Finance
-- [ ] Project Management
+See [DATABASE.md](DATABASE.md) for the full schema reference.
 
 ---
 
-## 🤝 Contributing
+## Architecture
 
-We welcome contributions! Please read our [Contributing Guide](CONTRIBUTING.md) before submitting PRs.
+Mero Jugx uses a **modular monolith** pattern where each business application (CRM, Inventory, etc.) lives in its own NestJS module with its own controllers, services, and TypeORM entities — but all share a single PostgreSQL database with row-level tenant isolation.
 
----
-
-## 📄 License
-
-Copyright © 2024 BlendWit Tech. All rights reserved.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the detailed system design.
 
 ---
 
-## 🆘 Support
+## Deployment
 
-- **Email**: support@blendwit.com
-- **Documentation**: [docs.merojugx.com](https://docs.merojugx.com)
-- **Issues**: [GitHub Issues](https://github.com/BlendWitTech/mero-jugx/issues)
+### Docker Compose (recommended for self-hosting)
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+### Railway (cloud)
+- Connect your GitHub repo to Railway
+- Set all environment variables in Railway dashboard
+- Railway auto-detects `Procfile` and deploys
+
+### Vercel + Railway (hybrid)
+- Deploy `app/` to Vercel (static frontend)
+- Deploy `api/` to Railway (NestJS backend)
+- Set `VITE_API_URL` in Vercel to point to Railway API URL
 
 ---
 
-**Built with ❤️ in Nepal, for Nepal**
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System design, module structure, data flow |
+| [DATABASE.md](DATABASE.md) | Schema reference, entity domains, migration strategy |
+| [Api.md](Api.md) | Full API endpoint reference |
+| [Developer_Guide.md](Developer_Guide.md) | Development workflow, adding new apps |
+| [.github/BRANCH_STRATEGY.md](.github/BRANCH_STRATEGY.md) | Git branching and PR conventions |
+
+### Per-App Documentation
+
+| App | Docs |
+|-----|------|
+| Mero CRM | [README](api/marketplace/organization/mero-crm/README.md) · [API](api/marketplace/organization/mero-crm/Api.md) |
+| Mero Inventory | [README](api/marketplace/organization/mero-inventory/README.md) · [API](api/marketplace/organization/mero-inventory/Api.md) |
+| Mero Accounting | [README](api/marketplace/organization/mero-accounting/README.md) · [API](api/marketplace/organization/mero-accounting/Api.md) |
+| Mero HR | [README](api/marketplace/organization/mero-hr/README.md) · [API](api/marketplace/organization/mero-hr/Api.md) |
+| Mero Khata | [README](api/marketplace/organization/mero-khata/README.md) · [API](api/marketplace/organization/mero-khata/Api.md) |
+| Mero Board | [README](api/marketplace/shared/mero-board/README.md) · [API](api/marketplace/shared/mero-board/Api.md) |
+| Mero CMS | [README](api/marketplace/organization/mero-cms/README.md) · [API](api/marketplace/organization/mero-cms/Api.md) |
+
+---
+
+## Contributing
+
+1. Fork and create a feature branch from `main`
+2. Follow the [Branch Strategy](.github/BRANCH_STRATEGY.md)
+3. Run `npm run lint` and `npm run build` before PR
+4. All PRs require review before merge
+
+---
+
+## License
+
+Proprietary — Blendwit Pvt. Ltd. All rights reserved.

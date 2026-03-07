@@ -30,10 +30,10 @@ export enum OrganizationType {
 }
 
 @Entity('organizations')
-@Index(['slug'], { unique: true })
-@Index(['email'], { unique: true })
-@Index(['status'])
-@Index(['package_id'])
+@Index('IDX_ORGANIZATIONS_STATUS', ['status'])
+@Index('IDX_ORGANIZATIONS_PACKAGE_ID', ['package_id'])
+@Index('IDX_ORGANIZATIONS_PARENT_ID', ['parent_id'])
+@Index('IDX_ORGANIZATIONS_PACKAGE_EXPIRES_AT', ['package_expires_at'])
 export class Organization {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -44,8 +44,8 @@ export class Organization {
   @Column({ type: 'varchar', length: 255, unique: true })
   slug: string;
 
-  @Column({ type: 'varchar', length: 255, unique: true })
-  email: string;
+  @Column({ type: 'varchar', length: 255, unique: true, nullable: true })
+  email: string | null;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
   phone: string | null;
@@ -105,7 +105,6 @@ export class Organization {
   industry: string | null;
 
   @Column({ type: 'int' })
-  @Index()
   package_id: number;
 
   @ManyToOne(() => Package)
@@ -147,7 +146,6 @@ export class Organization {
   status: OrganizationStatus;
 
   @Column({ type: 'timestamp', nullable: true })
-  @Index()
   package_expires_at: Date | null;
 
   @Column({ type: 'boolean', default: false })
@@ -160,7 +158,6 @@ export class Organization {
   has_upgraded_from_freemium: boolean;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   parent_id: string | null;
 
   @Column({
@@ -169,6 +166,15 @@ export class Organization {
     default: OrganizationType.MAIN,
   })
   org_type: OrganizationType;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  ip_whitelist: string[] | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  pan_number: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  vat_number: string | null;
 
   @CreateDateColumn()
   created_at: Date;

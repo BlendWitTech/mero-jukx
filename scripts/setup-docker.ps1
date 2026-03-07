@@ -13,13 +13,15 @@ try {
     $dockerVersion = docker --version 2>$null
     if ($dockerVersion) {
         Write-Host "Docker found: $dockerVersion" -ForegroundColor Green
-    } else {
+    }
+    else {
         Write-Host "Docker is not installed or not in PATH." -ForegroundColor Red
         Write-Host "Please install Docker Desktop:" -ForegroundColor Yellow
         Write-Host "  Windows: https://www.docker.com/products/docker-desktop" -ForegroundColor White
         exit 1
     }
-} catch {
+}
+catch {
     Write-Host "Docker is not installed or not in PATH." -ForegroundColor Red
     exit 1
 }
@@ -28,7 +30,8 @@ Write-Host ""
 Write-Host "Step 1: Installing dependencies..." -ForegroundColor Blue
 if ((Test-Path "node_modules") -and (Test-Path "app/node_modules")) {
     Write-Host "  Dependencies already installed, skipping..." -ForegroundColor Gray
-} else {
+}
+else {
     Write-Host "  Installing backend dependencies..." -ForegroundColor White
     npm install
     if ($LASTEXITCODE -ne 0) {
@@ -82,6 +85,19 @@ $SCRIPT_DIR = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 Write-Host ""
 Write-Host "Step 3: Starting Docker containers (PostgreSQL and Redis)..." -ForegroundColor Blue
+
+# Check if volumes already exist (project prefix might be mero_jugx or mero-jugx or merojugx)
+$existingVolumes = docker volume ls --format "{{.Name}}" | Where-Object { $_ -match "mero.*_postgres_data|mero.*_pgdata" }
+if ($existingVolumes) {
+    Write-Host "  ⚠ WARNING: Existing database volumes found ($($existingVolumes -join ', '))" -ForegroundColor Yellow
+    Write-Host "  If you want a COMPLETELY FRESH setup, you should run 'npm run reset' first." -ForegroundColor Yellow
+    $resetChoice = Read-Host "  Do you want to continue with existing data (this might cause errors)? (y/n) [default: y]"
+    if ($resetChoice -eq "n" -or $resetChoice -eq "N") {
+        Write-Host "  Setup aborted. Please run 'npm run reset' to clear data." -ForegroundColor Yellow
+        exit 0
+    }
+}
+
 docker-compose up -d postgres redis
 if ($LASTEXITCODE -eq 0) {
     Write-Host "Docker containers started" -ForegroundColor Green
@@ -99,7 +115,8 @@ if ($LASTEXITCODE -eq 0) {
     Write-Host "  1. Initialize database: npm run db:init" -ForegroundColor White
     Write-Host "     This will run migrations and seed base data" -ForegroundColor Gray
     Write-Host "  2. Start development servers: npm run start:dev" -ForegroundColor White
-} else {
+}
+else {
     Write-Host "Docker setup failed. Make sure Docker is running." -ForegroundColor Red
     exit 1
 }

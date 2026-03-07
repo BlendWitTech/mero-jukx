@@ -1,0 +1,9 @@
+﻿User: owner@blendwit.com (ID: ac531e91-6ebf-48e5-aab5-5cfd7418243c)
+
+Found 2 memberships:
+- Org: Blendwit International Pvt. Ltd. (Main Branch) (null), Status: active, Role ID: 10
+- Org: Blendwit International Pvt. Ltd. (blendwittech@gmail.com), Status: active, Role ID: 10
+
+Total organizations in DB: 2
+- Blendwit International Pvt. Ltd. (Main Branch) (null)
+- Blendwit International Pvt. Ltd. (blendwittech@gmail.com)

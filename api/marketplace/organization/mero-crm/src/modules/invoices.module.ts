@@ -8,6 +8,8 @@ import { CommonModule } from '@src/common/common.module';
 import { InvoicesController } from '../controllers/invoices.controller';
 import { InvoicesService } from '../services/invoices.service';
 import { SalesOrdersModule } from '../../../mero-inventory/src/modules/sales-orders.module';
+import { MeroAccountingModule } from '../../../mero-accounting/mero-accounting.module';
+import { CommunicationModule } from '../../../../../src/communication/communication.module';
 
 @Module({
     imports: [
@@ -15,6 +17,8 @@ import { SalesOrdersModule } from '../../../mero-inventory/src/modules/sales-ord
         AuditLogsModule,
         CommonModule,
         SalesOrdersModule,
+        MeroAccountingModule,
+        CommunicationModule,
     ],
     controllers: [InvoicesController],
     providers: [InvoicesService],

@@ -117,6 +117,60 @@ export class ReportController {
       'project',
     );
   }
+
+  @Get('projects/:projectId/burndown')
+  @Permissions('board.projects.view')
+  @ApiOperation({ summary: 'Get project burndown report' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiQuery({ name: 'days', required: false, type: Number })
+  async getBurndownReport(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('projectId') projectId: string,
+    @Query('days') days?: number,
+  ) {
+    return this.reportService.getBurndownReport(
+      user.userId,
+      organization.id,
+      projectId,
+      days ? Number(days) : 30,
+    );
+  }
+
+  @Get('projects/:projectId/time-analysis')
+  @Permissions('board.projects.view')
+  @ApiOperation({ summary: 'Get project time estimate vs actual analysis' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  async getTimeEstimateAnalysis(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('projectId') projectId: string,
+  ) {
+    return this.reportService.getTimeEstimateAnalysis(
+      user.userId,
+      organization.id,
+      projectId,
+    );
+  }
+
+  @Get('projects/:projectId/cycle-time')
+  @Permissions('board.projects.view')
+  @ApiOperation({ summary: 'Get real cycle time report using activity logs (time from in_progress → done)' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  async getCycleTimeReport(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('projectId') projectId: string,
+  ) {
+    return this.reportService.getCycleTimeReport(
+      user.userId,
+      organization.id,
+      projectId,
+    );
+  }
 }
 
 

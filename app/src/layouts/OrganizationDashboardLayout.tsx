@@ -31,6 +31,7 @@ import {
   Sun,
   Moon,
   CreditCard,
+  Zap,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import * as React from 'react';
@@ -41,6 +42,7 @@ import { usePermissions } from '../hooks/usePermissions';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import api from '../services/api';
 import OrganizationSwitcher from '../components/OrganizationSwitcher';
+import BranchSwitcher from '../components/BranchSwitcher';
 import MembersList from '../components/MembersList';
 import RightSidebar from '../components/RightSidebar';
 import ChatManager from '../components/ChatManager';
@@ -52,6 +54,7 @@ import { getActiveAppIds, removeAppSession, removeAllAppSessions, getAppSession,
 import MarketplaceModal from '../components/MarketplaceModal/MarketplaceModal';
 import { ConfirmDialog } from '@shared/components/feedback/ConfirmDialog';
 import { TopHeader } from '@shared/components/layout/TopHeader';
+import GlobalSearchBar from '../components/GlobalSearchBar';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard, permission: null },
@@ -63,6 +66,7 @@ const navigation = [
   { name: 'Packages', href: '/packages', icon: Package, permission: 'packages.view' },
   { name: 'Billing', href: '/billing', icon: CreditCard, permission: 'packages.view' },
   { name: 'Apps', href: '/apps', icon: Grid3x3, permission: 'apps.view' },
+  { name: 'Workflows', href: '/workflows', icon: Zap, permission: 'organizations.view' },
   { name: 'Audit Logs', href: '/audit-logs', icon: Activity, permission: 'audit.view' },
   { name: 'Settings', href: '/settings', icon: Settings, permission: null },
 ];
@@ -207,7 +211,7 @@ export default function OrganizationDashboardLayout() {
   const currentAppId = currentApp?.id || null;
 
   // Fetch current organization details
-  const { data: currentOrganization } = useQuery<{ id: string; name: string; slug: string }>({
+  const { data: currentOrganization } = useQuery<{ id: string; name: string; slug: string; org_type?: string; parent_id?: string | null }>({
     queryKey: ['current-organization'],
     queryFn: async () => {
       const response = await api.get('/organizations/me');
@@ -223,6 +227,8 @@ export default function OrganizationDashboardLayout() {
         id: currentOrganization.id,
         name: currentOrganization.name || '',
         slug: currentOrganization.slug,
+        org_type: (currentOrganization as any).org_type,
+        parent_id: (currentOrganization as any).parent_id,
       });
     }
   }, [currentOrganization, orgFromStore?.slug]);
@@ -455,8 +461,9 @@ export default function OrganizationDashboardLayout() {
         >
           {/* Organization Switcher Icon - Hide when app is open */}
           {!isAppOpen && (
-            <div className="mb-2 overflow-visible" style={{ overflow: 'visible' }}>
+            <div className="mb-2 flex flex-col items-center space-y-2 overflow-visible" style={{ overflow: 'visible' }}>
               <OrganizationSwitcher compact={true} />
+              <BranchSwitcher compact={true} />
             </div>
           )}
 
@@ -716,7 +723,14 @@ export default function OrganizationDashboardLayout() {
             </div>
             <nav className={`space-y-0.5 ${leftSidebarCollapsed ? 'space-y-2' : ''}`}>
               {!isLoadingPermissions && navigation
-                .filter((item) => !item.permission || hasPermission(item.permission))
+                .filter((item) => {
+                  // Hide certain items for branches (managed by parent organization)
+                  const isBranch = organization?.org_type === 'BRANCH' || !!organization?.parent_id;
+                  if (isBranch && ['Roles', 'Packages', 'Billing'].includes(item.name)) {
+                    return false;
+                  }
+                  return !item.permission || hasPermission(item.permission);
+                })
                 .map((item) => {
                   const Icon = item.icon;
                   // Build href with organization slug
@@ -900,8 +914,9 @@ export default function OrganizationDashboardLayout() {
                     })
                     : () => setLeftSidebarCollapsed(false)
             }
+            searchComponent={<GlobalSearchBar />}
             notificationsComponent={<NotificationDropdown />}
-            showCloseMinimize={isAppOpen && (currentApp?.slug === 'mero-board' || currentApp?.slug === 'mero-crm' || currentApp?.slug === 'mero-inventory')} // Show close/minimize in header when right sidebar not available
+            showCloseMinimize={isAppOpen && (currentApp?.slug === 'mero-board' || currentApp?.slug === 'mero-crm' || currentApp?.slug === 'mero-inventory' || currentApp?.slug === 'mero-accounting' || currentApp?.slug === 'mero-hr')} // Show close/minimize in header when right sidebar not available
             onClose={isAppOpen ? handleCloseApp : undefined}
             onMinimize={isAppOpen ? handleMinimizeApp : undefined}
           />
@@ -943,9 +958,8 @@ export default function OrganizationDashboardLayout() {
         }}
       />
 
-      {/* Right Sidebar - Hide for mero-board and mero-crm apps (by slug or subdomain), show for other apps and main dashboard */}
-      {currentApp?.slug !== 'mero-board' && currentApp?.slug !== 'mero-crm' && currentApp?.slug !== 'mero-inventory' &&
-        getAppNameFromSubdomain() !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-crm' && getAppNameFromSubdomain() !== 'mero-inventory' && (
+      {currentApp?.slug !== 'mero-board' && currentApp?.slug !== 'mero-crm' && currentApp?.slug !== 'mero-inventory' && currentApp?.slug !== 'mero-accounting' && currentApp?.slug !== 'mero-hr' &&
+        getAppNameFromSubdomain() !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-crm' && getAppNameFromSubdomain() !== 'mero-inventory' && getAppNameFromSubdomain() !== 'mero-accounting' && getAppNameFromSubdomain() !== 'mero-hr' && (
           <div className="relative">
             {rightSidebarCollapsed ? (
               <button
@@ -973,9 +987,9 @@ export default function OrganizationDashboardLayout() {
                 isCollapsed={rightSidebarCollapsed}
                 onCollapse={() => setRightSidebarCollapsed(true)}
                 onExpand={() => setRightSidebarCollapsed(false)}
-                isAppOpen={isAppOpen && currentApp?.slug !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-board'}
-                onCloseApp={isAppOpen && currentApp?.slug !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-board' ? handleCloseApp : undefined}
-                onMinimizeApp={isAppOpen && currentApp?.slug !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-board' ? handleMinimizeApp : undefined}
+                isAppOpen={isAppOpen && currentApp?.slug !== 'mero-board' && currentApp?.slug !== 'mero-accounting' && getAppNameFromSubdomain() !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-accounting'}
+                onCloseApp={isAppOpen && currentApp?.slug !== 'mero-board' && currentApp?.slug !== 'mero-accounting' && getAppNameFromSubdomain() !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-accounting' ? handleCloseApp : undefined}
+                onMinimizeApp={isAppOpen && currentApp?.slug !== 'mero-board' && currentApp?.slug !== 'mero-accounting' && getAppNameFromSubdomain() !== 'mero-board' && getAppNameFromSubdomain() !== 'mero-accounting' ? handleMinimizeApp : undefined}
               />
             )}
           </div>

@@ -25,17 +25,15 @@ export enum InvitationType {
 }
 
 @Entity('invitations')
-@Index(['token'], { unique: true })
-@Index(['organization_id', 'email'])
-@Index(['status'])
-@Index(['expires_at'])
-@Index(['user_id'])
+@Index('IDX_INVITATIONS_ORG_ID_EMAIL', ['organization_id', 'email'])
+@Index('IDX_INVITATIONS_STATUS', ['status'])
+@Index('IDX_INVITATIONS_EXPIRES_AT', ['expires_at'])
+@Index('IDX_INVITATIONS_USER_ID', ['user_id'])
 export class Invitation {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   organization_id: string;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
@@ -76,7 +74,6 @@ export class Invitation {
   accepted_at: Date | null;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   user_id: string | null;
 
   @ManyToOne(() => User, { nullable: true })

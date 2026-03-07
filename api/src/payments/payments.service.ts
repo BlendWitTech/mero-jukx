@@ -4,6 +4,8 @@ import {
   BadRequestException,
   ForbiddenException,
   Logger,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -26,6 +28,10 @@ import { Role } from '../database/entities/roles.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { EsewaService } from './esewa.service';
 import { StripeService } from './stripe.service';
+import { KhaltiService } from './khalti.service';
+import { ConnectIpsService } from './connect-ips.service';
+import { PaypalService } from './paypal.service';
+import { ImePayService } from './ime-pay.service';
 import { PackagesService } from '../packages/packages.service';
 import {
   NotificationHelperService,
@@ -33,6 +39,8 @@ import {
 } from '../notifications/notification-helper.service';
 import { EmailService } from '../common/services/email.service';
 import { EmailTemplatesService } from '../common/services/email-templates.service';
+import { AppsService } from '../apps/apps.service';
+import { AppAccessService } from '../apps/app-access.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
@@ -58,10 +66,18 @@ export class PaymentsService {
     private roleRepository: Repository<Role>,
     private esewaService: EsewaService,
     private stripeService: StripeService,
+    private khaltiService: KhaltiService,
+    private connectIpsService: ConnectIpsService,
+    private paypalService: PaypalService,
+    private imePayService: ImePayService,
     private packagesService: PackagesService,
     private notificationHelper: NotificationHelperService,
     private emailService: EmailService,
     private emailTemplatesService: EmailTemplatesService,
+    @Inject(forwardRef(() => AppsService))
+    private appsService: AppsService,
+    @Inject(forwardRef(() => AppAccessService))
+    private appAccessService: AppAccessService,
   ) { }
 
   /**
@@ -134,12 +150,27 @@ export class PaymentsService {
         }
       }
 
+      // Check location-based gateway visibility
+      const country = (organization.country || '').toUpperCase();
+      const isNepal = country === 'NP' || country === 'NEPAL' || organization.currency === 'NPR';
+      const nepalGateways = [PaymentGateway.ESEWA, PaymentGateway.KHALTI, PaymentGateway.CONNECT_IPS, PaymentGateway.IME_PAY];
+      const globalGateways = [PaymentGateway.STRIPE, PaymentGateway.PAYPAL];
+
+      if (isNepal && !nepalGateways.includes(createPaymentDto.gateway)) {
+        throw new BadRequestException(`Gateway ${createPaymentDto.gateway} is not available for organizations in Nepal. Please use eSewa, Khalti, or ConnectIPS.`);
+      }
+
+      if (!isNepal && !globalGateways.includes(createPaymentDto.gateway)) {
+        throw new BadRequestException(`Gateway ${createPaymentDto.gateway} is only available for organizations in Nepal. Please use Stripe or PayPal.`);
+      }
+
       // Generate unique transaction ID
       const transactionId = uuidv4();
 
       // Determine currency based on gateway
-      // eSewa uses NPR, Stripe can use USD or NPR
-      const currency = createPaymentDto.gateway === PaymentGateway.ESEWA ? 'NPR' : 'USD';
+      // eSewa/Khalti/ConnectIPS use NPR, Stripe/PayPal use USD
+      const isNprGateway = [PaymentGateway.ESEWA, PaymentGateway.KHALTI, PaymentGateway.CONNECT_IPS, PaymentGateway.IME_PAY].includes(createPaymentDto.gateway);
+      const currency = isNprGateway ? 'NPR' : 'USD';
 
       // Calculate amount - ensure it's a valid number with 2 decimal places
       let amount = Math.round(createPaymentDto.amount * 100) / 100;
@@ -153,7 +184,7 @@ export class PaymentsService {
       if (createPaymentDto.gateway === PaymentGateway.ESEWA) {
         // eSewa requires tax calculation: baseAmount = totalAmount / 1.13
         baseAmount = Math.round((amount / 1.13) * 100) / 100;
-        taxAmount = Math.round(baseAmount * 0.13 * 100) / 100;
+        taxAmount = Math.round((amount - baseAmount) * 100) / 100;
         finalAmount = Math.round((baseAmount + taxAmount) * 100) / 100;
       }
 
@@ -184,7 +215,7 @@ export class PaymentsService {
         const esewaResponse = await this.esewaService.initiatePayment(
           finalAmount,
           transactionId,
-          process.env.ESEWA_PRODUCT_CODE || 'EPAYTEST', // Use a default or config
+          undefined, // Let service use configured product code (merchantId)
           `${frontendUrl}/payment/success`,
           `${frontendUrl}/payment/failure`
         );
@@ -252,6 +283,101 @@ export class PaymentsService {
           });
           throw error; // Re-throw to let NestJS handle it
         }
+      } else if (createPaymentDto.gateway === PaymentGateway.KHALTI) {
+        // Generate Khalti payment form
+        const customerInfo = {
+          name: `${membership.user.first_name} ${membership.user.last_name}`,
+          email: membership.user.email,
+          phone: membership.user.phone || '',
+        };
+        const khaltiResponse = await this.khaltiService.initiatePayment(
+          finalAmount,
+          transactionId,
+          createPaymentDto.description || `Payment for ${createPaymentDto.payment_type}`,
+          customerInfo,
+        );
+
+        return {
+          payment: {
+            id: payment.id,
+            transaction_id: payment.transaction_id,
+            amount: payment.amount,
+            status: payment.status,
+            created_at: payment.created_at,
+          },
+          payment_form: {
+            formUrl: khaltiResponse.payment_url,
+            formData: {
+              pidx: khaltiResponse.pidx,
+            },
+          },
+        };
+      } else if (createPaymentDto.gateway === PaymentGateway.CONNECT_IPS) {
+        // Generate ConnectIPS payment form
+        const connectIpsResponse = await this.connectIpsService.initiatePayment(
+          finalAmount,
+          transactionId,
+          createPaymentDto.description || `Payment for ${createPaymentDto.payment_type}`,
+        );
+
+        return {
+          payment: {
+            id: payment.id,
+            transaction_id: payment.transaction_id,
+            amount: payment.amount,
+            status: payment.status,
+            created_at: payment.created_at,
+          },
+          payment_form: {
+            formUrl: connectIpsResponse.gatewayUrl,
+            formData: connectIpsResponse.formData,
+          },
+        };
+      } else if (createPaymentDto.gateway === PaymentGateway.PAYPAL) {
+        // Generate PayPal order
+        const paypalResponse = await this.paypalService.createOrder(
+          finalAmount,
+          currency,
+          transactionId,
+          createPaymentDto.description || `Payment for ${createPaymentDto.payment_type}`,
+        );
+
+        return {
+          payment: {
+            id: payment.id,
+            transaction_id: payment.transaction_id,
+            amount: payment.amount,
+            status: payment.status,
+            created_at: payment.created_at,
+          },
+          payment_form: {
+            formUrl: paypalResponse.approvalUrl,
+            formData: {
+              orderId: paypalResponse.orderId,
+            },
+          },
+        };
+      } else if (createPaymentDto.gateway === PaymentGateway.IME_PAY) {
+        // Generate IME Pay payment form
+        const imePayResponse = await this.imePayService.initiatePayment(
+          finalAmount,
+          transactionId,
+          createPaymentDto.description || `Payment for ${createPaymentDto.payment_type}`,
+        );
+
+        return {
+          payment: {
+            id: payment.id,
+            transaction_id: payment.transaction_id,
+            amount: payment.amount,
+            status: payment.status,
+            created_at: payment.created_at,
+          },
+          payment_form: {
+            formUrl: imePayResponse.gatewayUrl,
+            formData: imePayResponse.formData,
+          },
+        };
       } else {
         throw new BadRequestException(`Unsupported payment gateway: ${createPaymentDto.gateway}`);
       }
@@ -321,6 +447,8 @@ export class PaymentsService {
       );
     }
 
+    this.logger.log(`Attempting to verify payment. TransactionId: ${transactionId || 'N/A'}, SessionId: ${sessionId || 'N/A'}, RefId: ${refId || 'N/A'}`);
+
     if (payment.status === PaymentStatus.COMPLETED) {
       return {
         success: true,
@@ -344,9 +472,11 @@ export class PaymentsService {
       // refId is optional but recommended for better verification
       // Verify with eSewa (v2 API requires total_amount)
       try {
+        const amountToVerify = Math.round(parseFloat(payment.amount.toString()) * 100) / 100;
+        this.logger.log(`Verifying eSewa payment of ${amountToVerify} for transaction ${transactionId}`);
         verificationResult = await this.esewaService.verifyTransaction(
           transactionId,
-          parseFloat(payment.amount.toString()), // Convert decimal to number
+          amountToVerify,
         );
       } catch (error: any) {
         this.logger.error(`eSewa verification exception: ${error.message}`, error.stack);
@@ -362,6 +492,24 @@ export class PaymentsService {
       }
       // Verify with Stripe
       verificationResult = await this.stripeService.verifyPayment(sessionId);
+    } else if (payment.gateway === PaymentGateway.KHALTI) {
+      if (!refId && !transactionId) {
+        throw new BadRequestException('pidx or transactionId is required for Khalti payments');
+      }
+      verificationResult = await this.khaltiService.verifyPayment(refId || transactionId);
+    } else if (payment.gateway === PaymentGateway.PAYPAL) {
+      if (!refId && !sessionId) {
+        throw new BadRequestException('orderId or sessionId is required for PayPal payments');
+      }
+      verificationResult = await this.paypalService.captureOrder(refId || sessionId);
+    } else if (payment.gateway === PaymentGateway.CONNECT_IPS) {
+      verificationResult = { status: 'success', message: 'ConnectIPS payment received' };
+    } else if (payment.gateway === PaymentGateway.IME_PAY) {
+      if (!refId) {
+        throw new BadRequestException('tokenId is required for IME Pay verification');
+      }
+      const amountToVerify = Math.round(parseFloat(payment.amount.toString()) * 100) / 100;
+      verificationResult = await this.imePayService.verifyTransaction(transactionId, refId, amountToVerify);
     } else {
       throw new BadRequestException(`Unsupported payment gateway: ${payment.gateway}`);
     }
@@ -510,7 +658,7 @@ export class PaymentsService {
       // Handle package upgrade
       const packageId = payment.metadata?.package_id;
       this.logger.log(
-        `Package upgrade requested: package_id=${packageId} (type: ${typeof packageId})`,
+        `Processing package upgrade for payment ${payment.id}: package_id=${packageId}`,
       );
 
       if (!packageId) {
@@ -610,7 +758,7 @@ export class PaymentsService {
       // Handle app subscription activation
       const appId = payment.metadata?.app_id;
       this.logger.log(
-        `App subscription activation requested: app_id=${appId} (type: ${typeof appId})`,
+        `Processing app subscription activation for payment ${payment.id}: app_id=${appId}`,
       );
 
       if (!appId) {
@@ -670,6 +818,45 @@ export class PaymentsService {
         this.logger.log(
           `App subscription ${appIdNum} activated successfully for organization ${payment.organization_id}`,
         );
+
+        // Increment app subscription count (since we skipped it in purchaseApp for paid apps)
+        if (this.appsService) {
+          await this.appsService.incrementSubscriptionCount(appIdNum);
+        }
+
+        // Grant access to all organization members
+        const purchaserId = payment.user_id;
+        const orgId = payment.organization_id;
+
+        if (this.appAccessService) {
+          try {
+            // Fetch all members of the organization
+            const members = await this.memberRepository.find({
+              where: {
+                organization_id: orgId,
+                status: OrganizationMemberStatus.ACTIVE,
+              },
+            });
+
+            this.logger.log(`Granting app ${appIdNum} access to ${members.length} organization members`);
+
+            // Grant access to each member
+            for (const member of members) {
+              try {
+                await this.appAccessService.grantAccess(purchaserId, orgId, {
+                  user_id: member.user_id,
+                  app_id: appIdNum,
+                  // role_id will be handled by grantAccess (defaults to member's role or app default)
+                });
+              } catch (e) {
+                // Ignore if access already exists or other non-critical error
+                this.logger.debug(`Could not grant access to user ${member.user_id}: ${e.message}`);
+              }
+            }
+          } catch (error) {
+            this.logger.error(`Failed to grant app access to organization members: ${error.message}`);
+          }
+        }
 
         // Mark invoice as paid if it exists
         const invoice = await this.invoiceRepository.findOne({

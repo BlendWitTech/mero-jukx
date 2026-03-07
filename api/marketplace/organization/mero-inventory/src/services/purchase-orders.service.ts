@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { PurchaseOrder, PurchaseOrderStatus } from '../entities/purchase-order.entity';
@@ -6,9 +6,12 @@ import { PurchaseOrderItem } from '../entities/purchase-order-item.entity';
 import { Stock } from '../entities/stock.entity';
 import { StockMovement, StockMovementType } from '../entities/stock-movement.entity';
 import { Product } from '../entities/product.entity';
+import { InventoryAccountingService } from './inventory-accounting.service';
 
 @Injectable()
 export class PurchaseOrdersService {
+    private readonly logger = new Logger(PurchaseOrdersService.name);
+
     constructor(
         @InjectRepository(PurchaseOrder)
         private poRepository: Repository<PurchaseOrder>,
@@ -17,6 +20,7 @@ export class PurchaseOrdersService {
         @InjectRepository(Product)
         private productRepository: Repository<Product>,
         private dataSource: DataSource,
+        private readonly inventoryAccountingService: InventoryAccountingService,
     ) { }
 
     async create(organizationId: string, data: any): Promise<PurchaseOrder> {
@@ -105,8 +109,27 @@ export class PurchaseOrdersService {
 
                 // Update quantity
                 const oldQuantity = Number(stock.quantity);
-                stock.quantity = oldQuantity + Number(item.quantity);
+                const newQuantity = Number(item.quantity);
+                stock.quantity = oldQuantity + newQuantity;
                 await queryRunner.manager.save(stock);
+
+                // Update WAC (Weighted Average Cost) on Product
+                const product = await queryRunner.manager.findOne(Product, { where: { id: item.productId } });
+                if (product) {
+                    const oldCost = Number(product.cost_price) || 0;
+                    const newCost = Number(item.unitPrice) || 0;
+
+                    // WAC Formula: ((Old Total Value) + (New Total Value)) / (New Total Quantity)
+                    // If old quantity is 0 or less, new cost becomes the cost price.
+                    if (oldQuantity > 0) {
+                        const totalOldValue = oldQuantity * oldCost;
+                        const totalNewValue = newQuantity * newCost;
+                        product.cost_price = (totalOldValue + totalNewValue) / (oldQuantity + newQuantity);
+                    } else {
+                        product.cost_price = newCost;
+                    }
+                    await queryRunner.manager.save(product);
+                }
 
                 // Create Movement Record
                 const movement = queryRunner.manager.create(StockMovement, {
@@ -124,6 +147,10 @@ export class PurchaseOrdersService {
             }
 
             await queryRunner.commitTransaction();
+
+            // Post PO receipt to accounting as DRAFT journal entry (non-blocking)
+            await this.inventoryAccountingService.postPurchaseOrderToAccounting(po, organizationId, 'system');
+
             return po;
         } catch (err) {
             await queryRunner.rollbackTransaction();

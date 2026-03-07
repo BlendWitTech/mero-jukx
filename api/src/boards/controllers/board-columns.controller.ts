@@ -21,6 +21,12 @@ export class BoardColumnsController {
     findAll(@Param('boardId') boardId: string) {
         return this.columnsService.findAll(boardId);
     }
+
+    @Put('reorder')
+    @Permissions('boards.update')
+    reorder(@Param('boardId') boardId: string, @Body() reorderDto: { columnId: string, newPosition: number }) {
+        return this.columnsService.reorder(boardId, reorderDto.columnId, reorderDto.newPosition);
+    }
 }
 
 @Controller('columns') // Separate controller for direct column operations if needed

@@ -56,9 +56,11 @@ $useDocker = $false
 $dockerContainer = $null
 
 if (-not $psqlPath) {
-    # Try to use Docker's psql
-    $dockerPath = Get-Command docker -ErrorAction SilentlyContinue
-    if ($dockerPath) {
+    # Try to use Docker
+    $hasDocker = $false
+    try { $hasDocker = $null -ne (docker --version 2>$null) } catch {}
+    
+    if ($hasDocker) {
         # Check if postgres container is running
         $containers = docker ps --filter "name=postgres" --format "{{.Names}}" 2>$null
         if ($containers) {
@@ -94,7 +96,8 @@ $env:PGPASSWORD = $DB_PASSWORD
 # Test connection first
 if ($useDocker) {
     $testConnection = "SELECT 1;" | docker exec -i $dockerContainer psql -U $DB_USER -d $DB_NAME -t -q 2>&1
-} else {
+}
+else {
     $testConnection = "SELECT 1;" | & psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -t -q 2>&1
 }
 
@@ -115,45 +118,46 @@ if ($LASTEXITCODE -ne 0) {
 
 # Drop all tables, constraints, and types
 $dropScript = "DO `$`$ DECLARE`n" +
-    "    r RECORD;`n" +
-    "BEGIN`n" +
-    "    -- Drop all foreign key constraints first (ignore errors if constraint doesn't exist)`n" +
-    "    FOR r IN (SELECT conname, conrelid::regclass FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace)`n" +
-    "    LOOP`n" +
-    "        BEGIN`n" +
-    "            EXECUTE 'ALTER TABLE ' || r.conrelid || ' DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname) || ' CASCADE';`n" +
-    "        EXCEPTION WHEN OTHERS THEN`n" +
-    "            -- Ignore errors for constraints that don't exist`n" +
-    "            NULL;`n" +
-    "        END;`n" +
-    "    END LOOP;`n" +
-    "    `n" +
-    "    -- Drop all tables`n" +
-    "    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')`n" +
-    "    LOOP`n" +
-    "        BEGIN`n" +
-    "            EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';`n" +
-    "        EXCEPTION WHEN OTHERS THEN`n" +
-    "            -- Ignore errors`n" +
-    "            NULL;`n" +
-    "        END;`n" +
-    "    END LOOP;`n" +
-    "    `n" +
-    "    -- Drop all types (enums)`n" +
-    "    FOR r IN (SELECT typname FROM pg_type WHERE typtype = 'e' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public'))`n" +
-    "    LOOP`n" +
-    "        BEGIN`n" +
-    "            EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';`n" +
-    "        EXCEPTION WHEN OTHERS THEN`n" +
-    "            -- Ignore errors`n" +
-    "            NULL;`n" +
-    "        END;`n" +
-    "    END LOOP;`n" +
-    "END `$`$;"
+"    r RECORD;`n" +
+"BEGIN`n" +
+"    -- Drop all foreign key constraints first (ignore errors if constraint doesn't exist)`n" +
+"    FOR r IN (SELECT conname, conrelid::regclass FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace)`n" +
+"    LOOP`n" +
+"        BEGIN`n" +
+"            EXECUTE 'ALTER TABLE ' || r.conrelid || ' DROP CONSTRAINT IF EXISTS ' || quote_ident(r.conname) || ' CASCADE';`n" +
+"        EXCEPTION WHEN OTHERS THEN`n" +
+"            -- Ignore errors for constraints that don't exist`n" +
+"            NULL;`n" +
+"        END;`n" +
+"    END LOOP;`n" +
+"    `n" +
+"    -- Drop all tables`n" +
+"    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')`n" +
+"    LOOP`n" +
+"        BEGIN`n" +
+"            EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';`n" +
+"        EXCEPTION WHEN OTHERS THEN`n" +
+"            -- Ignore errors`n" +
+"            NULL;`n" +
+"        END;`n" +
+"    END LOOP;`n" +
+"    `n" +
+"    -- Drop all types (enums)`n" +
+"    FOR r IN (SELECT typname FROM pg_type WHERE typtype = 'e' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public'))`n" +
+"    LOOP`n" +
+"        BEGIN`n" +
+"            EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';`n" +
+"        EXCEPTION WHEN OTHERS THEN`n" +
+"            -- Ignore errors`n" +
+"            NULL;`n" +
+"        END;`n" +
+"    END LOOP;`n" +
+"END `$`$;"
 
 if ($useDocker) {
     $output = $dropScript | docker exec -i $dockerContainer psql -U $DB_USER -d $DB_NAME -q 2>&1
-} else {
+}
+else {
     $output = $dropScript | & psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d $DB_NAME -q 2>&1
 }
 $exitCode = $LASTEXITCODE
@@ -164,7 +168,8 @@ if ($exitCode -eq 0) {
     Write-Host "  - All tables and data have been dropped" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next step: Run 'npm run db:init' to recreate tables and seed data." -ForegroundColor Yellow
-} else {
+}
+else {
     Write-Host ""
     Write-Host "ERROR: Database reset failed!" -ForegroundColor Red
     if ($output) {

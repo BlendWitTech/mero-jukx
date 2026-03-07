@@ -108,6 +108,31 @@ export class TaskController {
     );
   }
 
+  @Get('calendar')
+  @Permissions('board.tasks.view')
+  @ApiOperation({ summary: 'Get all tasks for a project within a date range (calendar view)' })
+  @ApiResponse({ status: 200, description: 'Tasks retrieved successfully' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiQuery({ name: 'startDate', required: true, description: 'Start date (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'endDate', required: true, description: 'End date (YYYY-MM-DD)' })
+  async getTasksForCalendar(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return this.taskService.getTasksForCalendar(
+      user.userId,
+      organization.id,
+      projectId,
+      startDate,
+      endDate,
+    );
+  }
+
   @Get(':taskId')
   @Permissions('board.tasks.view')
   @ApiOperation({ summary: 'Get a specific task' })
@@ -178,6 +203,107 @@ export class TaskController {
       organization.id,
       projectId,
       taskId,
+    );
+  }
+
+  @Post(':taskId/move')
+  @Permissions('board.tasks.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Move a task to a different column/position' })
+  @ApiResponse({ status: 200, description: 'Task moved successfully' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async moveTask(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() body: { targetColumnId: string; position: number },
+  ) {
+    return this.taskService.moveTask(
+      user.userId,
+      organization.id,
+      projectId,
+      taskId,
+      body.targetColumnId,
+      body.position,
+    );
+  }
+
+  // Task Checklists
+  @Post(':taskId/checklist')
+  @Permissions('board.tasks.manage')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a checklist item to a task' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async addChecklistItem(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() body: { title: string },
+  ) {
+    return this.taskService.addChecklistItem(
+      user.userId,
+      organization.id,
+      projectId,
+      taskId,
+      body.title,
+    );
+  }
+
+  @Put(':taskId/checklist/:itemId/toggle')
+  @Permissions('board.tasks.manage')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Toggle a checklist item completion status' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  @ApiParam({ name: 'itemId', description: 'Checklist Item ID' })
+  async toggleChecklistItem(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    return this.taskService.toggleChecklistItem(
+      user.userId,
+      organization.id,
+      projectId,
+      taskId,
+      itemId,
+    );
+  }
+
+  @Delete(':taskId/checklist/:itemId')
+  @Permissions('board.tasks.manage')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a checklist item' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  @ApiParam({ name: 'itemId', description: 'Checklist Item ID' })
+  async deleteChecklistItem(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Param('itemId') itemId: string,
+  ) {
+    await this.taskService.deleteChecklistItem(
+      user.userId,
+      organization.id,
+      projectId,
+      taskId,
+      itemId,
     );
   }
 
@@ -585,6 +711,81 @@ export class TaskController {
       projectId,
       startDate,
       endDate,
+    );
+  }
+
+  // ── Card Watchers ────────────────────────────────────────────────────────
+
+  @Post(':taskId/watchers')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Watch a task' })
+  @ApiResponse({ status: 201, description: 'Now watching task' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async addWatcher(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.taskService.addWatcher(user.userId, organization.id, projectId, taskId);
+  }
+
+  @Delete(':taskId/watchers')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Unwatch a task' })
+  @ApiResponse({ status: 204, description: 'Stopped watching task' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async removeWatcher(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    await this.taskService.removeWatcher(user.userId, organization.id, projectId, taskId);
+  }
+
+  @Get(':taskId/watchers')
+  @ApiOperation({ summary: 'Get all watchers of a task' })
+  @ApiResponse({ status: 200, description: 'Watchers retrieved' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async getWatchers(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('appSlug') appSlug: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.taskService.getWatchers(user.userId, organization.id, projectId, taskId);
+  }
+
+  // ── CRM Deal Linking ─────────────────────────────────────────────────────
+
+  @Put(':taskId/crm-deal')
+  @ApiOperation({ summary: 'Link or unlink a CRM deal to a task' })
+  @ApiParam({ name: 'appSlug', description: 'App Slug' })
+  @ApiParam({ name: 'projectId', description: 'Project ID' })
+  @ApiParam({ name: 'taskId', description: 'Task ID' })
+  async linkCrmDeal(
+    @CurrentUser() user: any,
+    @CurrentOrganization() organization: any,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() body: { crm_deal_id: string | null },
+  ) {
+    return this.taskService.linkCrmDeal(
+      user.userId,
+      organization.id,
+      projectId,
+      taskId,
+      body.crm_deal_id,
     );
   }
 }

@@ -22,10 +22,9 @@ export enum UserStatus {
 }
 
 @Entity('users')
-@Index(['email'], { unique: true })
-@Index(['status'])
-@Index(['email_verified'])
-@Index(['is_system_admin'])
+@Index('IDX_USERS_STATUS', ['status'])
+@Index('IDX_USERS_EMAIL_VERIFIED', ['email_verified'])
+@Index('IDX_USERS_IS_SYSTEM_ADMIN', ['is_system_admin'])
 export class User {
   @PrimaryGeneratedColumn('uuid')
   id: string;

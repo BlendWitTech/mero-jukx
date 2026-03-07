@@ -47,9 +47,40 @@ export { Task, TaskStatus, TaskPriority } from './tasks.entity';
 export { SystemSetting } from './system_settings.entity';
 export { AppInvitation, AppInvitationStatus } from './app_invitations.entity';
 export { CrmClient } from './crm_clients.entity';
+export { CrmContact } from './crm_contacts.entity';
+export { CrmPipeline } from './crm_pipelines.entity';
+export { CrmStage } from './crm_stages.entity';
 export { CrmInvoice, CrmInvoiceItem, InvoiceStatus as CrmInvoiceStatus, PaymentStatus as CrmPaymentStatus } from './crm_invoices.entity';
 export { CrmPayment } from './crm_payments.entity';
 export { CrmTax } from './crm_taxes.entity';
 export { CrmPaymentMode } from './crm_payment_modes.entity';
 export { CrmQuote, CrmQuoteItem, QuoteStatus as CrmQuoteStatus } from './crm_quotes.entity';
 export { CrmSetting } from './crm_settings.entity';
+
+// HR Entities
+export { HrEmployee } from './hr_employees.entity';
+export { HrAttendance } from './hr_attendance.entity';
+export { HrLeaveRequest } from './hr_leave_requests.entity';
+export { HrPayroll } from './hr_payroll.entity';
+export { HrDepartment } from './hr_departments.entity';
+export { HrDesignation } from './hr_designations.entity';
+export { HrDocument } from './hr_documents.entity';
+// HR Phase 2
+export { HrShift } from './hr_shifts.entity';
+export { HrPublicHoliday } from './hr_public_holidays.entity';
+export { HrLeaveBalance } from './hr_leave_balances.entity';
+// HR Phase 3
+export { HrJobOpening } from './hr_job_openings.entity';
+export { HrCandidate } from './hr_candidates.entity';
+export { HrPerformanceGoal } from './hr_performance_goals.entity';
+export { HrPerformanceReview } from './hr_performance_reviews.entity';
+export { HrTrainingProgram } from './hr_training_programs.entity';
+export { HrExitRecord } from './hr_exit_records.entity';
+
+// Accounting
+export { PaymentAllocation, AllocationInvoiceType } from './payment_allocations.entity';
+export { BankStatement, BankStatementLine, BankStatementStatus, BankStatementLineStatus } from './bank_statements.entity';
+export { Cheque, ChequeType, ChequeStatus } from './cheques.entity';
+export { Budget, BudgetLine, BudgetType } from './budgets.entity';
+export { CostCenter, CostCenterType } from './cost_centers.entity';
+export { ExchangeRate } from './exchange_rates.entity';

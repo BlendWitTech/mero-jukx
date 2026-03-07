@@ -25,7 +25,7 @@ import { PurchaseFeatureDto } from './dto/purchase-feature.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class PackagesController {
-  constructor(private readonly packagesService: PackagesService) {}
+  constructor(private readonly packagesService: PackagesService) { }
 
   @Get()
   @Permissions('packages.view')
@@ -59,7 +59,7 @@ export class PackagesController {
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class OrganizationPackagesController {
-  constructor(private readonly packagesService: PackagesService) {}
+  constructor(private readonly packagesService: PackagesService) { }
 
   @Get('me/package')
   @Permissions('packages.view')
@@ -142,5 +142,14 @@ export class OrganizationPackagesController {
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
   async calculateUpgradePrice(@CurrentUser() user: any, @Body() dto: UpgradePackageDto) {
     return this.packagesService.calculateUpgradePrice(user.userId, user.organizationId, dto);
+  }
+
+  @Post('me/package/repair-branch-limits')
+  @HttpCode(HttpStatus.OK)
+  @Permissions('packages.upgrade')
+  @ApiOperation({ summary: 'Repair organization branch limits based on package' })
+  @ApiResponse({ status: 200, description: 'Branch limits repaired successfully' })
+  async repairBranchLimits(@CurrentUser() user: any) {
+    return this.packagesService.repairBranchLimits(user.organizationId);
   }
 }

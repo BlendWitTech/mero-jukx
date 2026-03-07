@@ -7,6 +7,7 @@ import { Card, Button, Input, Label, Textarea } from '@shared';
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
 import { toast } from '@shared';
 import { useAppContext } from '../../contexts/AppContext';
+import ProductLookup from '../../components/ProductLookup';
 
 export default function InvoiceFormPage() {
     const { theme } = useTheme();
@@ -60,9 +61,7 @@ export default function InvoiceFormPage() {
                 issueDate: invoice.issueDate.split('T')[0],
                 dueDate: invoice.dueDate.split('T')[0],
                 notes: invoice.notes || '',
-                status: invoice.status === 'paid' || invoice.status === 'overdue' || invoice.status === 'cancelled'
-                    ? invoice.status
-                    : invoice.status,
+                status: invoice.status as any,
             });
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Failed to fetch invoice');
@@ -294,12 +293,19 @@ export default function InvoiceFormPage() {
                                 >
                                     <div className="col-span-12 md:col-span-5">
                                         <Label htmlFor={`description-${index}`}>Description</Label>
+                                        <ProductLookup
+                                            onSelect={(product) => {
+                                                handleItemChange(index, 'description', product.name);
+                                                handleItemChange(index, 'unitPrice', product.selling_price);
+                                            }}
+                                        />
                                         <Input
                                             id={`description-${index}`}
                                             type="text"
                                             value={item.description}
                                             onChange={(e) => handleItemChange(index, 'description', e.target.value)}
-                                            placeholder="Item description"
+                                            placeholder="Or enter manually..."
+                                            className="mt-2"
                                             required
                                         />
                                     </div>

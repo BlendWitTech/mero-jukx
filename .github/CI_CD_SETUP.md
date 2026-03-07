@@ -1,23 +1,22 @@
 # CI/CD Setup Guide
 
-This document explains the CI/CD pipeline setup for Mero Jugx.
+This document explains the CI/CD pipeline setup for Mero Jugx and how to contribute safely as a new developer.
 
 ## Overview
 
-The project includes multiple GitHub Actions workflows for:
+The project uses GitHub Actions for:
 - Continuous Integration (CI)
 - Continuous Deployment (CD)
-- Automated testing
+- Automated testing (unit, integration, E2E)
 - Docker image building
-- Vercel deployment
+- Vercel deployment (frontend)
 
 ## Workflows
 
 ### 1. CI Pipeline (`.github/workflows/ci.yml`)
 
 **Triggers:**
-- Push to `main`, `development`, `testing`, `production` branches
-- Pull requests to these branches
+- Push/PR to `main`, `development`, `testing`, `production` branches
 
 **Jobs:**
 - Lint and test backend code
@@ -26,13 +25,13 @@ The project includes multiple GitHub Actions workflows for:
 - Deploy to production (if on main branch)
 
 **Usage:**
-This workflow runs automatically on push/PR. No manual action required.
+- Runs automatically on push/PR. No manual action required.
+- All PRs must pass CI before merge (see branch protection rules).
 
 ### 2. Full CI/CD Pipeline (`.github/workflows/full-ci-cd.yml`)
 
 **Triggers:**
-- Push to `main`, `development`, `production` branches
-- Pull requests to these branches
+- Push/PR to `main`, `development`, `production` branches
 
 **Jobs:**
 - Lint backend and frontend separately
@@ -42,13 +41,12 @@ This workflow runs automatically on push/PR. No manual action required.
 - Deploy to Vercel (main/production only)
 
 **Usage:**
-More comprehensive than `ci.yml`, includes separate linting and full build process.
+- More comprehensive than `ci.yml`, includes separate linting and full build process.
 
 ### 3. Vercel Deployment (`.github/workflows/vercel-deploy.yml`)
 
 **Triggers:**
-- Push to `main` or `production` branches
-- Pull requests to these branches
+- Push/PR to `main` or `production` branches
 - Only runs when frontend files change
 
 **Jobs:**
@@ -58,6 +56,25 @@ More comprehensive than `ci.yml`, includes separate linting and full build proce
 
 **Required Secrets:**
 - `VERCEL_TOKEN`
+
+---
+
+## Branch Protection & PRs
+- All protected branches (`main`, `development`, `testing`, `production`) require PRs and passing CI.
+- No direct pushes allowed except by owner (see [BRANCH_STRATEGY.md](BRANCH_STRATEGY.md)).
+- At least one approval required for merge.
+
+## Troubleshooting
+- If CI fails, check logs for lint/test/build errors.
+- For Docker issues, see [README.md](../README.md) and [Developer_Guide.md](../Developer_Guide.md).
+- For secrets, ensure all required tokens are set in repo settings.
+
+---
+
+## See Also
+- [README.md](../README.md): Quick start and overview
+- [Developer_Guide.md](../Developer_Guide.md): Setup and workflow
+- [BRANCH_STRATEGY.md](BRANCH_STRATEGY.md): Branching and PR rules
 - `VERCEL_ORG_ID`
 - `VERCEL_PROJECT_ID`
 - `VITE_API_URL` (optional, can be set in Vercel dashboard)

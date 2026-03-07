@@ -1,8 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
-
-export type TaskbarVisibility = 'always' | 'hover';
+import { TaskbarVisibility } from '../types/taskbar';
 
 interface TaskbarContextType {
   visibility: TaskbarVisibility;
@@ -12,7 +11,14 @@ interface TaskbarContextType {
 const TaskbarContext = createContext<TaskbarContextType | undefined>(undefined);
 
 export function TaskbarProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuthStore();
+  const [authState, setAuthState] = useState(() => useAuthStore.getState());
+  useEffect(() => {
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      setAuthState(state);
+    });
+    return unsubscribe;
+  }, []);
+  const { isAuthenticated, user } = authState;
 
   // Initialize with preference from localStorage or default
   const [visibility, setVisibilityState] = useState<TaskbarVisibility>(() => {

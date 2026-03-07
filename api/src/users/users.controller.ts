@@ -19,6 +19,7 @@ import { UsersService } from './users.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
+import { CurrentOrganization } from '../common/decorators/current-organization.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UpdateUserAdminDto } from './dto/update-user-admin.dto';
@@ -30,7 +31,7 @@ import { RevokeAccessDto } from './dto/revoke-access.dto';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(private readonly usersService: UsersService) { }
 
   @Get('me')
   @ApiOperation({ summary: 'Get current user profile' })
@@ -81,8 +82,12 @@ export class UsersController {
   @ApiOperation({ summary: 'List organization users' })
   @ApiResponse({ status: 200, description: 'Users retrieved successfully' })
   @ApiResponse({ status: 403, description: 'Insufficient permissions' })
-  async getOrganizationUsers(@CurrentUser() user: any, @Query() query: UserQueryDto) {
-    return this.usersService.getOrganizationUsers(user.userId, user.organizationId, query);
+  async getOrganizationUsers(
+    @CurrentUser() user: any,
+    @Query() query: UserQueryDto,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
+  ) {
+    return this.usersService.getOrganizationUsers(user.userId, user.organizationId, query, accessibleIds);
   }
 
   @Get(':id')

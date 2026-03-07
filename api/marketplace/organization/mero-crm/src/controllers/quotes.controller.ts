@@ -104,4 +104,16 @@ export class QuotesController {
     ) {
         return this.quotesService.convertToInvoice(id, userId, organizationId);
     }
+
+    @Post(':id/send-email')
+    @Permissions('crm.invoices.view')
+    @ApiOperation({ summary: 'Send quote via email' })
+    @ApiResponse({ status: 200, description: 'Email sent successfully' })
+    async sendEmail(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() data: { to?: string; subject?: string; message?: string },
+    ) {
+        return this.quotesService.sendEmail(id, organizationId, data.to, data.subject, data.message);
+    }
 }

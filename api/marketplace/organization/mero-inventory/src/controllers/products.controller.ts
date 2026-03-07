@@ -43,9 +43,15 @@ export class ProductsController {
         return this.productsService.remove(id, req.user.organizationId);
     }
 
-    @Post(':id/adjust-stock')
-    @Permissions('inventory.products.edit')
-    adjustStock(@Param('id') id: string, @Body() data: any, @Request() req) {
-        return this.productsService.adjustStock(id, data, req.user.organizationId);
+    @Post(':id/variants/bulk')
+    @Permissions('inventory.products.create')
+    bulkCreateVariants(@Param('id') id: string, @Body() variants: CreateProductDto[], @Request() req) {
+        return this.productsService.bulkCreateVariants(id, variants, req.user.organizationId);
+    }
+
+    @Post('bulk')
+    @Permissions('inventory.products.create')
+    bulkCreate(@Body() products: CreateProductDto[], @Request() req) {
+        return this.productsService.bulkCreate(products, req.user.organizationId);
     }
 }

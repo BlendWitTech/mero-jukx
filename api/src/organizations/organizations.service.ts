@@ -3,10 +3,11 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In, Between } from 'typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
@@ -21,12 +22,16 @@ import { Role } from '../database/entities/roles.entity';
 import { Invitation } from '../database/entities/invitations.entity';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { CreateBranchDto } from './dto/create-branch.dto';
+import { UpdateBranchDto } from './dto/update-branch.dto';
 import { UpdateOrganizationSettingsDto } from './dto/update-organization-settings.dto';
 import { EmailService } from '../common/services/email.service';
 import { RedisService } from '../common/services/redis.service';
 import { Notification } from '../database/entities/notifications.entity';
 import { OrganizationApp, OrganizationAppStatus, OrganizationAppBillingPeriod } from '../database/entities/organization_apps.entity';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { Ticket, TicketStatus } from '../database/entities/tickets.entity';
+import { Payment, PaymentStatus } from '../database/entities/payments.entity';
+import { AuditLog } from '../database/entities/audit_logs.entity';
 
 @Injectable()
 export class OrganizationsService {
@@ -49,6 +54,12 @@ export class OrganizationsService {
     private invitationRepository: Repository<Invitation>,
     @InjectRepository(OrganizationApp)
     private organizationAppRepository: Repository<OrganizationApp>,
+    @InjectRepository(Ticket)
+    private ticketRepository: Repository<Ticket>,
+    @InjectRepository(Payment)
+    private paymentRepository: Repository<Payment>,
+    @InjectRepository(AuditLog)
+    private auditLogRepository: Repository<AuditLog>,
     private emailService: EmailService,
     private redisService: RedisService,
     private auditLogsService: AuditLogsService,
@@ -85,12 +96,15 @@ export class OrganizationsService {
     const membership = await this.getActiveMembership(userId, organizationId, [
       'organization',
       'organization.package',
+      'organization.parent',
+      'organization.parent.package',
       'role',
       'role.role_permissions',
       'role.role_permissions.permission',
     ]);
 
     const organization = membership.organization as any;
+    organization.branch_limit = organization.branch_limit || organization.package?.base_branch_limit || 1;
     organization.current_user_role = {
       role_id: membership.role_id,
       role_name: membership.role.name,
@@ -325,7 +339,11 @@ export class OrganizationsService {
     return result;
   }
 
-  async getOrganizationStatistics(userId: string, organizationId: string): Promise<any> {
+  async getOrganizationStatistics(
+    userId: string,
+    organizationId: string,
+    accessibleOrganizationIds?: string[],
+  ): Promise<any> {
     await this.getActiveMembership(userId, organizationId);
 
     const organization = await this.organizationRepository.findOne({
@@ -345,6 +363,67 @@ export class OrganizationsService {
       },
     });
 
+    // Get pending invitations count
+    const pendingInvitationsCount = await this.invitationRepository
+      .createQueryBuilder('invitation')
+      .where('invitation.organization_id = :orgId', { orgId: organizationId })
+      .andWhere('invitation.status = :status', { status: 'pending' })
+      .andWhere('invitation.expires_at > :now', { now: new Date() })
+      .getCount();
+
+    // For freemium package, only count default roles (excluding branch-super-admin)
+    if (organization.package.slug === 'freemium') {
+      const count = await this.roleRepository
+        .createQueryBuilder('role')
+        .where('role.organization_id IS NULL')
+        .andWhere('role.is_default = :isDefault', { isDefault: true })
+        .andWhere('role.is_active = :isActive', { isActive: true })
+        .andWhere('role.deleted_at IS NULL')
+        .andWhere('role.slug != :branchRole', { branchRole: 'branch-super-admin' })
+        .getCount();
+
+      // Get additional metrics for freemium
+      const openTicketsCount = await this.ticketRepository.count({
+        where: {
+          organization_id: organizationId,
+          status: In([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]),
+        },
+      });
+
+      const payments = await this.paymentRepository.find({
+        where: {
+          organization_id: organizationId,
+          status: PaymentStatus.COMPLETED,
+        },
+        select: ['amount'],
+      });
+      const totalSpend = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const actionsTodayCount = await this.auditLogRepository.count({
+        where: {
+          organization_id: organizationId,
+          created_at: Between(todayStart, todayEnd),
+        },
+      });
+
+      return {
+        total_users: activeUsersCount,
+        user_limit: organization.package.base_user_limit,
+        user_usage_percentage: Math.round((activeUsersCount / organization.package.base_user_limit) * 100),
+        total_roles: count,
+        role_limit: organization.package.base_role_limit,
+        role_usage_percentage: Math.round((count / organization.package.base_role_limit) * 100),
+        open_tickets: openTicketsCount,
+        total_spend: totalSpend,
+        actions_today: actionsTodayCount,
+      };
+    }
+
     // Get organization-specific roles count
     const orgRolesCount = await this.roleRepository
       .createQueryBuilder('role')
@@ -354,39 +433,80 @@ export class OrganizationsService {
       .getCount();
 
     // Get default/system roles count (always available to all organizations)
-    const defaultRolesCount = await this.roleRepository
+    let defaultRolesQuery = this.roleRepository
       .createQueryBuilder('role')
       .where('role.organization_id IS NULL')
       .andWhere('role.is_default = :isDefault', { isDefault: true })
       .andWhere('role.is_active = :isActive', { isActive: true })
-      .andWhere('role.deleted_at IS NULL')
-      .getCount();
+      .andWhere('role.deleted_at IS NULL');
+
+    // Filter out branch-specific roles for MAIN organizations
+    if (organization.org_type === OrganizationType.MAIN) {
+      defaultRolesQuery = defaultRolesQuery.andWhere('role.slug != :branchRole', { branchRole: 'branch-super-admin' });
+    }
+
+    const defaultRolesCount = await defaultRolesQuery.getCount();
 
     const totalRolesCount = orgRolesCount + defaultRolesCount;
 
-    // Get pending invitations count
-    const pendingInvitationsCount = await this.invitationRepository
-      .createQueryBuilder('invitation')
-      .where('invitation.organization_id = :orgId', { orgId: organizationId })
-      .andWhere('invitation.status = :status', { status: 'pending' })
-      .andWhere('invitation.expires_at > :now', { now: new Date() })
-      .getCount();
+    const totalRoleLimit = organization.package.base_role_limit + (organization.package.additional_role_limit || 0);
+
+    // Get additional metrics
+    const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
+    // Total distinct active users across all accessible organizations (Main + Branches)
+    const totalUsersResult = await this.memberRepository
+      .createQueryBuilder('member')
+      .select('COUNT(DISTINCT member.user_id)', 'count')
+      .where('member.organization_id IN (:...orgIds)', { orgIds })
+      .andWhere('member.status = :status', { status: OrganizationMemberStatus.ACTIVE })
+      .getRawOne();
+
+    const totalUsersCount = parseInt(totalUsersResult?.count || '0', 10);
+
+    const openTicketsCount = await this.ticketRepository.count({
+      where: {
+        organization_id: organizationId,
+        status: In([TicketStatus.OPEN, TicketStatus.IN_PROGRESS]),
+      },
+    });
+
+    const payments = await this.paymentRepository.find({
+      where: {
+        organization_id: organizationId,
+        status: PaymentStatus.COMPLETED,
+      },
+      select: ['amount'],
+    });
+    const totalSpend = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const actionsTodayCount = await this.auditLogRepository.count({
+      where: {
+        organization_id: organizationId,
+        created_at: Between(todayStart, todayEnd),
+      },
+    });
+
+    const isBranch = organization.org_type === OrganizationType.BRANCH;
 
     return {
-      organization_id: organizationId,
-      organization_name: organization.name,
-      total_users: activeUsersCount,
-      user_limit: organization.user_limit,
-      user_usage_percentage: Math.round((activeUsersCount / organization.user_limit) * 100),
-      total_roles: totalRolesCount,
-      role_limit: organization.role_limit,
-      role_usage_percentage: Math.round((totalRolesCount / organization.role_limit) * 100),
-      pending_invitations: pendingInvitationsCount,
-      mfa_enabled: organization.mfa_enabled,
-      package: {
-        id: organization.package_id,
-        name: organization.package?.name || 'Unknown',
-      },
+      total_users: totalUsersCount,
+      branch_users: activeUsersCount, // Users in current organization
+      user_limit: organization.user_limit || organization.package.base_user_limit,
+      user_usage_percentage: Math.round((totalUsersCount / (organization.user_limit || organization.package.base_user_limit)) * 100),
+      total_roles: isBranch ? 0 : totalRolesCount,
+      role_limit: isBranch ? 0 : totalRoleLimit,
+      role_usage_percentage: isBranch ? 0 : Math.round((totalRolesCount / totalRoleLimit) * 100),
+      open_tickets: openTicketsCount,
+      total_spend: isBranch ? 0 : totalSpend,
+      actions_today: actionsTodayCount,
     };
   }
 
@@ -530,6 +650,10 @@ export class OrganizationsService {
     try {
       this.logger.debug(`Creating branch for parent ${parentId} by user ${userId} with name ${dto.name}`);
 
+      if (dto.name.toLowerCase() === 'main branch') {
+        throw new BadRequestException('The name "Main Branch" is reserved for the primary organization account.');
+      }
+
       const parentOrg = await this.organizationRepository.findOne({
         where: { id: parentId },
         relations: ['package'],
@@ -539,25 +663,77 @@ export class OrganizationsService {
         throw new NotFoundException('Parent organization not found');
       }
 
+      // 1. Check Branch Limit
+      const currentBranchCount = await this.organizationRepository.count({
+        where: { parent_id: parentId, status: OrganizationStatus.ACTIVE },
+      });
+      const branchLimit = parentOrg.package?.base_branch_limit || 1;
+
+      if (currentBranchCount >= branchLimit) {
+        throw new BadRequestException(
+          `Branch limit reached (${branchLimit}). Please upgrade your package to create more branches.`,
+        );
+      }
+
+      // 2. Check User Limit (Distinct across group)
+      const rootOrgId = parentOrg.org_type === OrganizationType.MAIN ? parentOrg.id : parentOrg.parent_id;
+      const orgGroup = await this.organizationRepository.find({
+        where: [{ id: rootOrgId }, { parent_id: rootOrgId }],
+        select: ['id'],
+      });
+      const groupIds = orgGroup.map(o => o.id);
+
+      const distinctUsersResult = await this.memberRepository
+        .createQueryBuilder('member')
+        .select('COUNT(DISTINCT member.user_id)', 'count')
+        .where('member.organization_id IN (:...groupIds)', { groupIds })
+        .andWhere('member.status = :status', { status: OrganizationMemberStatus.ACTIVE })
+        .getRawOne();
+
+      const currentDistinctCount = parseInt(distinctUsersResult?.count || '0', 10);
+      const userLimit = parentOrg.user_limit || parentOrg.package?.base_user_limit || 0;
+
+      if (currentDistinctCount >= userLimit) {
+        // Technically creating a branch with the current user doesn't add a NEW user,
+        // but the user's request suggests blocking "creation as organization" if quota is hit.
+        throw new BadRequestException(
+          `Organization user quota reached (${userLimit}). Please upgrade your package before expanding your organization structure.`,
+        );
+      }
+
       if (parentOrg.org_type !== OrganizationType.MAIN) {
         throw new ForbiddenException('Only a Main Organization can have branches');
       }
 
-      const membership = await this.getActiveMembership(userId, parentId, ['role']);
+      const membership = await this.getActiveMembership(userId, parentId, [
+        'role',
+        'role.role_permissions',
+        'role.role_permissions.permission',
+      ]);
 
-      if (!membership.role.is_organization_owner) {
-        throw new ForbiddenException('Only organization owners can create branches');
+      const permissions = membership.role.role_permissions?.map((rp) => rp.permission.slug) || [];
+      if (!membership.role.is_organization_owner && !permissions.includes('organizations.create_branch')) {
+        throw new ForbiddenException('You do not have permission to create branches');
       }
 
-      // Enforce branch limit
+      // Enforce branch limit (MAIN org counts as 1)
       const currentBranches = await this.organizationRepository.count({
         where: { parent_id: parentId, org_type: OrganizationType.BRANCH },
       });
 
-      if (currentBranches >= parentOrg.branch_limit) {
+      const totalBranches = currentBranches + 1; // +1 for the MAIN organization
+
+      // Safety fallback: If current branch_limit is 1 but package allows more, use package limit
+      let effectiveLimit = parentOrg.branch_limit;
+      if (effectiveLimit === 1 && parentOrg.package && parentOrg.package.base_branch_limit > 1) {
+        effectiveLimit = parentOrg.package.base_branch_limit;
+      }
+
+      if (totalBranches >= effectiveLimit) {
         throw new ForbiddenException(
-          `Branch limit reached for your package (${parentOrg.branch_limit}). ` +
-          `Please upgrade your package or purchase a branch add-on to create more branches.`
+          `Branch limit reached for your package (${effectiveLimit}). ` +
+          `Your package (${parentOrg.package?.name || 'Current'}) allows up to ${effectiveLimit} total organization${effectiveLimit > 1 ? 's' : ''} (including main branch). ` +
+          `Please upgrade your package to create more branches.`
         );
       }
 
@@ -638,23 +814,215 @@ export class OrganizationsService {
     }
   }
 
-  async getBranches(userId: string, parentId: string): Promise<Organization[]> {
+  async getBranches(userId: string, targetId: string): Promise<Organization[]> {
     try {
-      await this.getActiveMembership(userId, parentId);
+      // Get the current organization to check if it's a branch
+      const currentOrg = await this.organizationRepository.findOne({
+        where: { id: targetId, status: OrganizationStatus.ACTIVE },
+        relations: ['parent'],
+      });
+
+      if (!currentOrg) {
+        throw new NotFoundException('Organization not found');
+      }
+
+      // If it's a branch, we want to fetch branches for its parent
+      const parentRepoId = currentOrg.org_type === OrganizationType.BRANCH && currentOrg.parent_id
+        ? currentOrg.parent_id
+        : targetId;
+
+      // Verify membership in the root organization (parent or current)
+      await this.getActiveMembership(userId, parentRepoId);
 
       const branches = await this.organizationRepository.find({
         where: {
-          parent_id: parentId,
-          status: OrganizationStatus.ACTIVE
+          parent_id: parentRepoId,
+          status: OrganizationStatus.ACTIVE,
         },
         order: { created_at: 'DESC' },
       });
+
+      // Fetch the parent organization to include it as the "Main Branch"
+      const rootOrg = await this.organizationRepository.findOne({
+        where: { id: parentRepoId, status: OrganizationStatus.ACTIVE },
+      });
+
+      if (rootOrg && rootOrg.org_type === OrganizationType.MAIN) {
+        // Return a copy with Name set to "Main Branch" for display
+        const mainBranch = { ...rootOrg, name: 'Main Branch' } as Organization;
+        return [mainBranch, ...branches];
+      }
 
       return branches;
     } catch (error: any) {
       this.logger.error(`Error in getBranches: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  async deleteBranch(userId: string, parentId: string, branchId: string): Promise<void> {
+    try {
+      const membership = await this.getActiveMembership(userId, parentId, [
+        'role',
+        'role.role_permissions',
+        'role.role_permissions.permission',
+      ]);
+
+      const permissions = membership.role.role_permissions?.map((rp) => rp.permission.slug) || [];
+
+      if (!membership.role.is_organization_owner && !permissions.includes('organizations.delete_branch')) {
+        throw new ForbiddenException('You do not have permission to delete branches');
+      }
+
+      const branch = await this.organizationRepository.findOne({
+        where: { id: branchId, parent_id: parentId, org_type: OrganizationType.BRANCH },
+      });
+
+      if (!branch) {
+        throw new NotFoundException('Branch not found or belongs to another organization');
+      }
+
+      await this.organizationRepository.remove(branch);
+
+      await this.auditLogsService.createAuditLog(
+        parentId,
+        userId,
+        'branch.delete',
+        'organization',
+        branchId,
+        { name: branch.name, slug: branch.slug },
+        null,
+      );
+    } catch (error: any) {
+      this.logger.error(`Error in deleteBranch: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  async updateBranch(
+    userId: string,
+    parentId: string,
+    branchId: string,
+    dto: UpdateBranchDto,
+  ): Promise<Organization> {
+    try {
+      this.logger.debug(`Updating branch ${branchId} for parent ${parentId} by user ${userId}`);
+
+      const membership = await this.getActiveMembership(userId, parentId, [
+        'role',
+        'role.role_permissions',
+        'role.role_permissions.permission',
+      ]);
+
+      const permissions = membership.role.role_permissions?.map((rp) => rp.permission.slug) || [];
+      if (!membership.role.is_organization_owner && !permissions.includes('organizations.edit')) {
+        throw new ForbiddenException('You do not have permission to update branches');
+      }
+
+      const branch = await this.organizationRepository.findOne({
+        where: { id: branchId, parent_id: parentId, org_type: OrganizationType.BRANCH },
+      });
+
+      if (!branch) {
+        throw new NotFoundException('Branch not found or belongs to another organization');
+      }
+
+      const { app_ids, ...updateData } = dto;
+
+      // Update basic details
+      Object.assign(branch, updateData);
+
+      // If name changed, update slug
+      if (updateData.name && updateData.name !== branch.name) {
+        branch.slug = this.generateSlug(`${branch.name}-${updateData.name}`);
+      }
+
+      const savedBranch = await this.organizationRepository.save(branch);
+
+      // Update app access if provided
+      if (app_ids) {
+        // Remove existing branch apps
+        await this.organizationAppRepository.delete({ organization_id: branchId });
+
+        // Add new app access
+        for (const appId of app_ids) {
+          const parentApp = await this.organizationAppRepository.findOne({
+            where: { organization_id: parentId, app_id: appId, status: OrganizationAppStatus.ACTIVE },
+          });
+
+          if (parentApp) {
+            const branchApp = this.organizationAppRepository.create({
+              organization_id: savedBranch.id,
+              app_id: appId,
+              status: OrganizationAppStatus.ACTIVE,
+              subscription_start: new Date(),
+              subscription_end: parentApp.subscription_end,
+              subscription_price: 0,
+              billing_period: parentApp.billing_period,
+              auto_renew: false,
+            });
+            await this.organizationAppRepository.save(branchApp);
+          }
+        }
+      }
+
+      await this.auditLogsService.createAuditLog(
+        parentId,
+        userId,
+        'branch.update',
+        'organization',
+        branchId,
+        null,
+        dto,
+      );
+
+      return savedBranch;
+    } catch (error: any) {
+      this.logger.error(`Error updating branch: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+
+  async updateIpWhitelist(orgId: string, userId: string, ips: string[]): Promise<Organization> {
+    await this.getActiveMembership(userId, orgId, ['role']);
+
+    // Validate IPv4/IPv6 format
+    const ipv4 = /^(\d{1,3}\.){3}\d{1,3}$/;
+    const ipv6 = /^([0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4}$/;
+    for (const ip of ips) {
+      if (!ipv4.test(ip) && !ipv6.test(ip)) {
+        throw new BadRequestException(`Invalid IP address format: ${ip}`);
+      }
+    }
+
+    await this.organizationRepository.update({ id: orgId }, { ip_whitelist: ips.length > 0 ? ips : null });
+    const updated = await this.organizationRepository.findOne({ where: { id: orgId } });
+    if (!updated) throw new NotFoundException('Organization not found');
+    return updated;
+  }
+
+  async updateTaxInfo(orgId: string, userId: string, dto: { pan_number?: string; vat_number?: string }): Promise<Organization> {
+    await this.getActiveMembership(userId, orgId, ['role']);
+
+    if (dto.pan_number !== undefined && dto.pan_number !== null && dto.pan_number !== '') {
+      if (!/^\d{9}$/.test(dto.pan_number)) {
+        throw new BadRequestException('PAN number must be exactly 9 digits');
+      }
+    }
+    if (dto.vat_number !== undefined && dto.vat_number !== null && dto.vat_number !== '') {
+      if (!/^\d{9}$/.test(dto.vat_number)) {
+        throw new BadRequestException('VAT number must be exactly 9 digits');
+      }
+    }
+
+    const updateData: any = {};
+    if (dto.pan_number !== undefined) updateData.pan_number = dto.pan_number || null;
+    if (dto.vat_number !== undefined) updateData.vat_number = dto.vat_number || null;
+
+    await this.organizationRepository.update({ id: orgId }, updateData);
+    const updated = await this.organizationRepository.findOne({ where: { id: orgId } });
+    if (!updated) throw new NotFoundException('Organization not found');
+    return updated;
   }
 
   private generateSlug(name: string): string {

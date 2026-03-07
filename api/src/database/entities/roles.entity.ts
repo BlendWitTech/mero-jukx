@@ -18,15 +18,15 @@ import { App } from './apps.entity';
 
 @Entity('roles')
 @Unique(['organization_id', 'slug'])
-@Index(['organization_id'])
-@Index(['is_system_role'])
-@Index(['is_active'])
+@Index('IDX_ROLES_ORG_ID', ['organization_id'])
+@Index('IDX_ROLES_APP_ID', ['app_id'])
+@Index('IDX_ROLES_SYSTEM_ROLE', ['is_system_role'])
+@Index('IDX_ROLES_ACTIVE', ['is_active'])
 export class Role {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   organization_id: string | null;
 
   @ManyToOne(() => Organization, { nullable: true, onDelete: 'CASCADE' })
@@ -34,7 +34,6 @@ export class Role {
   organization: Organization | null;
 
   @Column({ type: 'int', nullable: true })
-  @Index()
   app_id: number | null;
 
   @ManyToOne(() => App, { nullable: true, onDelete: 'CASCADE' })

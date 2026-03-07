@@ -406,7 +406,7 @@ STRIPE_WEBHOOK_SECRET=
 # CURRENCY CONFIGURATION
 # ============================================
 NPR_TO_USD_RATE=0.0075
-DEFAULT_CURRENCY=USD
+DEFAULT_CURRENCY=NPR
 NEPAL_COUNTRY_CODE=NP
 
 # ============================================
@@ -456,7 +456,7 @@ VITE_SENTRY_TRACES_SAMPLE_RATE=1.0
 
 # Currency Configuration
 VITE_NPR_TO_USD_RATE=0.0075
-VITE_DEFAULT_CURRENCY=USD
+VITE_DEFAULT_CURRENCY=NPR
 "@
     Set-Content -Path app/.env -Value $frontendEnvContent
     Write-Host "app/.env file created with all defaults" -ForegroundColor Green

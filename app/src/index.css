@@ -23,6 +23,7 @@
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
+
   *,
   *::before,
   *::after {
@@ -34,6 +35,7 @@
 
 /* Mobile optimizations */
 @media (max-width: 640px) {
+
   /* Improve touch targets */
   button,
   a,
@@ -47,6 +49,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -57,6 +60,7 @@
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -132,24 +136,24 @@
   .btn {
     @apply px-4 py-2 rounded-lg font-medium transition-colors duration-200;
   }
-  
+
   .btn-primary {
     background-color: var(--theme-primary);
     color: #ffffff;
     @apply hover:opacity-90 active:opacity-80;
   }
-  
+
   .btn-secondary {
     background-color: var(--theme-surface);
     color: var(--theme-text);
     border: 1px solid var(--theme-border);
     @apply hover:opacity-90 active:opacity-80;
   }
-  
+
   .btn-danger {
     @apply bg-red-600 text-white hover:bg-red-700 active:bg-red-800;
   }
-  
+
   .input {
     @apply w-full px-4 py-2 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent transition-colors;
     background-color: var(--theme-surface);
@@ -157,17 +161,29 @@
     color: var(--theme-text);
     --tw-ring-color: var(--theme-primary);
   }
-  
+
   .input::placeholder {
     color: var(--theme-text-secondary);
     opacity: 0.6;
   }
-  
+
   .card {
     @apply rounded-lg shadow-sm p-6 transition-colors;
     background-color: var(--theme-surface);
     border: 1px solid var(--theme-border);
     color: var(--theme-text);
+  }
+
+  /* Global Number Input Scroll Fix & Styling */
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+  }
+
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
   }
 
   /* Theme-aware utility classes */
@@ -199,9 +215,21 @@
     color: var(--theme-primary) !important;
   }
 
+  .hover-theme:hover {
+    background-color: var(--theme-hover) !important;
+  }
+
+  .hover-theme-strong:hover {
+    background-color: var(--theme-hover-strong) !important;
+  }
+
+  .hover-surface:hover {
+    background-color: var(--theme-surface-hover) !important;
+  }
+
   /* Global theme-aware styles that override hardcoded colors */
   /* These use CSS custom properties to ensure theme colors are applied */
-  
+
   /* Override common card/container backgrounds */
   .light-theme .card,
   .light-theme [class*="bg-\[#2f3136\]"],
@@ -238,22 +266,67 @@
     color: var(--theme-text-secondary) !important;
     opacity: 0.6;
   }
+
+  /* Glassmorphism Utilities */
+  .glass-surface {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  }
+
+  .light-theme .glass-surface {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+  }
+
+  .glass-border {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .light-theme .glass-border {
+    border: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  /* Premium Glassmorphism */
+  .premium-glass {
+    background: rgba(255, 255, 255, 0.015);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow:
+      0 4px 6px -1px rgba(0, 0, 0, 0.1),
+      0 2px 4px -1px rgba(0, 0, 0, 0.06),
+      inset 0 1px 1px rgba(255, 255, 255, 0.05);
+  }
+
+  .light-theme .premium-glass {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow:
+      0 10px 15px -3px rgba(0, 0, 0, 0.05),
+      0 4px 6px -2px rgba(0, 0, 0, 0.02);
+  }
 }
 
 @layer utilities {
   .animate-scale-in {
     animation: scaleIn 0.3s ease-out;
   }
-  
+
   .animate-progress {
     animation: progress 2s ease-out;
   }
-  
+
   .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
-  
+
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
   }
@@ -295,25 +368,42 @@
   .scrollbar-track-transparent::-webkit-scrollbar-track {
     background: transparent;
   }
-  
+
   @keyframes scaleIn {
     from {
       transform: scale(0);
       opacity: 0;
     }
+
     to {
       transform: scale(1);
       opacity: 1;
     }
   }
-  
+
   @keyframes progress {
     from {
       width: 0%;
     }
+
     to {
       width: 100%;
     }
   }
-}
 
+  @keyframes contentShow {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .animate-content-show {
+    animation: contentShow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}

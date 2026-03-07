@@ -5,6 +5,7 @@ import { AppBillingPeriod } from '../../database/entities/apps.entity';
 export enum PaymentMethod {
   STRIPE = 'stripe',
   ESEWA = 'esewa',
+  IME_PAY = 'ime_pay',
 }
 
 export class PurchaseAppDto {

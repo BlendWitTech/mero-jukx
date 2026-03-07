@@ -57,7 +57,20 @@ export class CreateProductDto {
 
     @IsBoolean()
     @IsOptional()
+    @IsNotEmpty()
     is_active?: boolean;
+
+    @IsUUID()
+    @IsOptional()
+    parent_id?: string;
+
+    @IsString()
+    @IsOptional()
+    attribute_type?: string;
+
+    @IsString()
+    @IsOptional()
+    attribute_value?: string;
 }
 
 export class UpdateProductDto {
@@ -120,4 +133,16 @@ export class UpdateProductDto {
     @IsBoolean()
     @IsOptional()
     is_active?: boolean;
+
+    @IsUUID()
+    @IsOptional()
+    parent_id?: string;
+
+    @IsString()
+    @IsOptional()
+    attribute_type?: string;
+
+    @IsString()
+    @IsOptional()
+    attribute_value?: string;
 }

@@ -4,6 +4,8 @@ import { HttpModule } from '@nestjs/axios';
 import { CommunicationController } from './communication.controller';
 import { CommunicationService } from './communication.service';
 import { SmsService } from './sms.service';
+import { WhatsAppService } from './whatsapp.service';
+import { SparrowSmsService } from './sparrow-sms.service';
 import { PushNotificationService } from './push-notification.service';
 import { EmailTemplateService } from './email-template.service';
 import { User } from '../database/entities/users.entity';
@@ -21,8 +23,8 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     AuditLogsModule,
   ],
   controllers: [CommunicationController],
-  providers: [CommunicationService, SmsService, PushNotificationService, EmailTemplateService],
-  exports: [SmsService, PushNotificationService, EmailTemplateService],
+  providers: [CommunicationService, SmsService, WhatsAppService, SparrowSmsService, PushNotificationService, EmailTemplateService],
+  exports: [SmsService, WhatsAppService, SparrowSmsService, PushNotificationService, EmailTemplateService],
 })
 export class CommunicationModule {}
 

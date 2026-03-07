@@ -21,15 +21,15 @@ export enum OrganizationMemberStatus {
 
 @Entity('organization_members')
 @Unique(['organization_id', 'user_id'])
-@Index(['user_id'])
-@Index(['role_id'])
-@Index(['status'])
+@Index('IDX_ORG_MEMBERS_ORG_ID', ['organization_id'])
+@Index('IDX_ORG_MEMBERS_USER_ID', ['user_id'])
+@Index('IDX_ORG_MEMBERS_ROLE_ID', ['role_id'])
+@Index('IDX_ORG_MEMBERS_STATUS', ['status'])
 export class OrganizationMember {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   organization_id: string;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })
@@ -37,7 +37,6 @@ export class OrganizationMember {
   organization: Organization;
 
   @Column({ type: 'uuid' })
-  @Index()
   user_id: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
@@ -45,7 +44,6 @@ export class OrganizationMember {
   user: User;
 
   @Column({ type: 'int' })
-  @Index()
   role_id: number;
 
   @ManyToOne(() => Role)

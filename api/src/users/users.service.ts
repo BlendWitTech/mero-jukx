@@ -60,7 +60,7 @@ export class UsersService {
     private dataSource: DataSource,
     private jwtService: JwtService,
     private configService: ConfigService,
-  ) {}
+  ) { }
 
   async getCurrentUser(
     userId: string,
@@ -241,6 +241,7 @@ export class UsersService {
     userId: string,
     organizationId: string,
     query: UserQueryDto,
+    accessibleOrganizationIds?: string[],
   ): Promise<{
     users: User[];
     total: number;
@@ -285,12 +286,22 @@ export class UsersService {
     const limit = query.limit || 10;
     const skip = (page - 1) * limit;
 
+    let orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
+    // Filter by scope if requested
+    if (query.scope === 'master') {
+      orgIds = [organizationId];
+    }
+
     // Build query
     const queryBuilder = this.memberRepository
       .createQueryBuilder('member')
       .leftJoinAndSelect('member.user', 'user')
       .leftJoinAndSelect('member.role', 'role')
-      .where('member.organization_id = :organizationId', { organizationId })
+      .leftJoinAndSelect('member.organization', 'organization')
+      .where('member.organization_id IN (:...orgIds)', { orgIds })
       .andWhere('member.status = :status', {
         status: OrganizationMemberStatus.ACTIVE,
       });
@@ -320,30 +331,47 @@ export class UsersService {
       .orderBy('user.created_at', 'DESC')
       .getMany();
 
-    // Include all members including the requesting user (they can see themselves but can't edit/revoke themselves)
-    const filteredMembers = allMembers;
+    // Group memberships by user ID to collect all branches for each user
+    const userMembershipsMap = new Map<string, any[]>();
+    allMembers.forEach((member) => {
+      const userId = member.user_id;
+      if (!userMembershipsMap.has(userId)) {
+        userMembershipsMap.set(userId, []);
+      }
+      userMembershipsMap.get(userId).push(member);
+    });
 
-    // Get total count
-    const total = filteredMembers.length;
+    const uniqueUserIds = Array.from(userMembershipsMap.keys());
+    const total = uniqueUserIds.length;
 
-    // Apply pagination
-    const members = filteredMembers.slice(skip, skip + limit);
+    // Apply pagination to unique users
+    const paginatedUserIds = uniqueUserIds.slice(skip, skip + limit);
 
-    // Map members to include user with role information
-    const users = filteredMembers.map((member) => ({
-      ...member.user,
-      fullName: `${member.user.first_name} ${member.user.last_name}`,
-      role: member.role
-        ? {
-            id: member.role.id,
-            name: member.role.name,
-            slug: member.role.slug,
-            is_organization_owner: member.role.is_organization_owner,
+    // Map to final response format
+    const users = paginatedUserIds.map((userId) => {
+      const memberships = userMembershipsMap.get(userId);
+      const primaryMember = memberships[0];
+
+      return {
+        ...primaryMember.user,
+        fullName: `${primaryMember.user.first_name} ${primaryMember.user.last_name}`,
+        role: primaryMember.role
+          ? {
+            id: primaryMember.role.id,
+            name: primaryMember.role.name,
+            slug: primaryMember.role.slug,
+            is_organization_owner: primaryMember.role.is_organization_owner,
           }
-        : null,
-      membership_status: member.status,
-      joined_at: member.joined_at,
-    }));
+          : null,
+        membership_status: primaryMember.status,
+        joined_at: primaryMember.joined_at,
+        branches: memberships.map((m) => ({
+          id: m.organization_id,
+          name: m.organization?.name || 'Unknown',
+          slug: m.organization?.slug || '',
+        })),
+      };
+    });
 
     // Total is already calculated from filtered members
     const filteredTotal = total;
@@ -1012,9 +1040,9 @@ export class UsersService {
       canImpersonate = true;
     } else {
       // Check if role is admin (slug === 'admin' or is_system_role with admin-like permissions)
-      const isAdmin = impersonatorMembership.role.slug === 'admin' || 
-                     (impersonatorMembership.role.is_system_role && impersonatorMembership.role.slug === 'admin');
-      
+      const isAdmin = impersonatorMembership.role.slug === 'admin' ||
+        (impersonatorMembership.role.is_system_role && impersonatorMembership.role.slug === 'admin');
+
       if (isAdmin) {
         canImpersonate = true;
       } else {

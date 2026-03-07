@@ -9,17 +9,21 @@ import { AppLoggerService } from './services/logger.service';
 import { CacheService } from './services/cache.service';
 import { CsrfGuard } from './guards/csrf.guard';
 import { SystemAdminGuard } from './guards/system-admin.guard';
-import { OrganizationMember } from '../database/entities/organization_members.entity';
-import { Role } from '../database/entities/roles.entity';
-import { User } from '../database/entities/users.entity';
-import { App } from '../database/entities/apps.entity';
-import { UserAppAccess } from '../database/entities/user_app_access.entity';
+import {
+  Organization,
+  OrganizationMember,
+  Role,
+  User,
+  App,
+  UserAppAccess,
+} from '../database/entities';
 import { AppAccessGuard } from './guards/app-access.guard';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { HierarchicalIsolationService } from './services/hierarchical-isolation.service';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([OrganizationMember, Role, User, App, UserAppAccess]),
+    TypeOrmModule.forFeature([Organization, OrganizationMember, Role, User, App, UserAppAccess]),
     forwardRef(() => AuditLogsModule),
   ],
   providers: [
@@ -33,6 +37,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     CacheService,
     CsrfGuard,
     AppAccessGuard,
+    HierarchicalIsolationService,
   ],
   exports: [
     TypeOrmModule,
@@ -46,6 +51,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     CacheService,
     CsrfGuard,
     AppAccessGuard,
+    HierarchicalIsolationService,
     forwardRef(() => AuditLogsModule),
   ],
 })

@@ -6,7 +6,7 @@ export const NPR_TO_USD_RATE = parseFloat(
   import.meta.env.VITE_NPR_TO_USD_RATE || '0.0075'
 );
 
-export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'USD';
+export const DEFAULT_CURRENCY = import.meta.env.VITE_DEFAULT_CURRENCY || 'NPR';
 export const NEPAL_COUNTRY_CODE = 'NP';
 
 /**
@@ -26,7 +26,9 @@ export const convertUSDToNPR = (usd: number): number => {
 /**
  * Format currency amount with elegant display
  */
-export const formatCurrency = (amount: number, currency: string): string => {
+export const formatCurrency = (amount: number, currencyInput: string = DEFAULT_CURRENCY): string => {
+  const currency = (currencyInput || DEFAULT_CURRENCY).toUpperCase();
+
   if (currency === 'NPR') {
     // Format NPR with proper formatting (NPR symbol: रू or Rs.)
     const formatted = new Intl.NumberFormat('en-NP', {
@@ -35,14 +37,19 @@ export const formatCurrency = (amount: number, currency: string): string => {
     }).format(amount);
     return `Rs. ${formatted}`;
   }
-  
+
   // Format USD with $ symbol
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency || 'USD',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  } catch (e) {
+    // Fallback for invalid currency codes
+    return `$ ${amount.toFixed(2)}`;
+  }
 };
 
 /**
@@ -52,7 +59,7 @@ export const formatCurrency = (amount: number, currency: string): string => {
 export const isNepalRegion = (): boolean => {
   // Check localStorage for user's country preference
   const userCountry = localStorage.getItem('user_country');
-  
+
   if (userCountry) {
     return userCountry === 'NP' || userCountry === 'Nepal';
   }

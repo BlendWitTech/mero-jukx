@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -26,6 +26,9 @@ const registerSchema = z.object({
   timezone: z.string().min(1, 'Timezone is required'),
   currency: z.string().min(1, 'Currency is required'),
   language: z.string().min(1, 'Language is required'),
+  country: z.string().min(1, 'Country is required'),
+  pan_number: z.string().regex(/^\d{9}$/, 'PAN must be 9 digits').optional().or(z.literal('')),
+  vat_number: z.string().regex(/^\d{9}$/, 'VAT must be 9 digits').optional().or(z.literal('')),
 });
 
 type RegisterFormData = z.infer<typeof registerSchema>;
@@ -109,11 +112,15 @@ export default function RegisterOrganizationPage() {
   const isAppContext = !!(appSlug || appIdFromUrl) && appInfo;
   const appDisplayName = appInfo?.name || appSlug || 'Mero Jugx';
 
+  // State for detected location
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+
   const {
     register,
     handleSubmit,
     watch,
     trigger,
+    setValue,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
@@ -122,11 +129,40 @@ export default function RegisterOrganizationPage() {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
       currency: 'USD',
       language: 'en',
+      country: '',
     },
   });
 
+  // Auto-detect location
+  useEffect(() => {
+    const detectLocation = async () => {
+      setIsDetectingLocation(true);
+      try {
+        const response = await fetch('https://ipapi.co/json/');
+        const data = await response.json();
+        if (data.country_name) {
+          setValue('country', data.country_name);
+          if (data.country_code === 'NP') {
+            setValue('currency', 'NPR');
+            setValue('timezone', 'Asia/Kathmandu');
+          } else if (data.currency) {
+            setValue('currency', data.currency);
+          }
+          if (data.timezone) {
+            setValue('timezone', data.timezone);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to detect location:', error);
+      } finally {
+        setIsDetectingLocation(false);
+      }
+    };
+    detectLocation();
+  }, []); // Only run once on mount
+
   const handleNext = async () => {
-    const isValid = await trigger(['name', 'email', 'timezone', 'currency', 'language']);
+    const isValid = await trigger(['name', 'email']);
     if (isValid) setStep(2);
   };
 
@@ -146,6 +182,7 @@ export default function RegisterOrganizationPage() {
         timezone: data.timezone,
         currency: data.currency,
         language: data.language,
+        country: data.country,
       });
 
       toast.success('Organization registered successfully! Please check your email to verify your account.');
@@ -395,87 +432,6 @@ export default function RegisterOrganizationPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
-                      Default Currency *
-                    </label>
-                    <select
-                      {...register('currency')}
-                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all"
-                      style={{
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text
-                      }}
-                    >
-                      <option value="USD">USD - Dollar</option>
-                      <option value="NPR">NPR - Rupee</option>
-                      <option value="EUR">EUR - Euro</option>
-                      <option value="GBP">GBP - Pound</option>
-                      <option value="INR">INR - Rupee (India)</option>
-                    </select>
-                    {errors.currency && <p className="text-xs mt-1 text-red-500">{errors.currency.message}</p>}
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
-                      Language *
-                    </label>
-                    <select
-                      {...register('language')}
-                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all"
-                      style={{
-                        backgroundColor: theme.colors.surface,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text
-                      }}
-                    >
-                      <option value="en">English</option>
-                      <option value="ne">Nepali</option>
-                      <option value="hi">Hindi</option>
-                    </select>
-                    {errors.language && <p className="text-xs mt-1 text-red-500">{errors.language.message}</p>}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
-                    Timezone *
-                  </label>
-                  <select
-                    {...register('timezone')}
-                    className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all"
-                    style={{
-                      backgroundColor: theme.colors.surface,
-                      borderColor: theme.colors.border,
-                      color: theme.colors.text
-                    }}
-                  >
-                    <option value="Asia/Kathmandu">(GMT+05:45) Kathmandu</option>
-                    <option value="UTC">(GMT+00:00) UTC</option>
-                    <option value="America/New_York">(GMT-05:00) New York</option>
-                    <option value="Europe/London">(GMT+00:00) London</option>
-                    <option value="Asia/Dubai">(GMT+04:00) Dubai</option>
-                    <option value="Asia/Kolkata">(GMT+05:30) Mumbai, Kolkata</option>
-                    <option value="Asia/Singapore">(GMT+08:00) Singapore</option>
-                    <option value="Australia/Sydney">(GMT+11:00) Sydney</option>
-                  </select>
-                  {errors.timezone && <p className="text-xs mt-1 text-red-500">{errors.timezone.message}</p>}
-                </div>
-
-                <div>
-                  <Input
-                    label="Business Phone (Optional)"
-                    id="owner_phone"
-                    type="tel"
-                    {...register('owner_phone')}
-                    placeholder="+977 98XXXXXXXX"
-                    leftIcon={<Phone className="w-5 h-5" />}
-                    fullWidth
-                  />
-                </div>
-
                 <div className="pt-4">
                   <Button
                     type="button"
@@ -511,10 +467,170 @@ export default function RegisterOrganizationPage() {
                     type="email"
                     {...register('owner_email')}
                     placeholder="owner@example.com"
-                    leftIcon={<Mail className="w-5 h-5" />}
                     error={errors.owner_email?.message}
                     fullWidth
                   />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      Country *
+                    </label>
+                    <div className="relative">
+                      <Input
+                        id="country"
+                        type="text"
+                        {...register('country')}
+                        placeholder="e.g. Nepal, USA"
+                        leftIcon={<Globe className="w-5 h-5" />}
+                        error={errors.country?.message}
+                        fullWidth
+                        disabled={isDetectingLocation}
+                      />
+                      {isDetectingLocation && (
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      Default Currency *
+                    </label>
+                    <select
+                      {...register('currency')}
+                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all"
+                      style={{
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text
+                      }}
+                    >
+                      <option value="USD">USD - Dollar</option>
+                      <option value="NPR">NPR - Rupee</option>
+                      <option value="EUR">EUR - Euro</option>
+                      <option value="GBP">GBP - Pound</option>
+                      <option value="INR">INR - Rupee (India)</option>
+                    </select>
+                    {errors.currency && <p className="text-xs mt-1 text-red-500">{errors.currency.message}</p>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 my-4">
+                  <div className="h-px flex-1" style={{ backgroundColor: theme.colors.border }}></div>
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full"
+                    style={{
+                      backgroundColor: `${theme.colors.primary}26`,
+                      color: theme.colors.primary,
+                    }}
+                  >
+                    Organization Settings
+                  </span>
+                  <div className="h-px flex-1" style={{ backgroundColor: theme.colors.border }}></div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      Timezone *
+                    </label>
+                    <select
+                      {...register('timezone')}
+                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all"
+                      style={{
+                        backgroundColor: theme.colors.surface,
+                        borderColor: theme.colors.border,
+                        color: theme.colors.text
+                      }}
+                    >
+                      <option value="Asia/Kathmandu">(GMT+05:45) Kathmandu</option>
+                      <option value="UTC">(GMT+00:00) UTC</option>
+                      <option value="America/New_York">(GMT-05:00) New York</option>
+                      <option value="Europe/London">(GMT+00:00) London</option>
+                      <option value="Asia/Dubai">(GMT+04:00) Dubai</option>
+                      <option value="Asia/Kolkata">(GMT+05:30) Mumbai, Kolkata</option>
+                      <option value="Asia/Singapore">(GMT+08:00) Singapore</option>
+                      <option value="Australia/Sydney">(GMT+11:00) Sydney</option>
+                    </select>
+                    {errors.timezone && <p className="text-xs mt-1 text-red-500">{errors.timezone.message}</p>}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      Language *
+                    </label>
+                    <div className="relative">
+                      <select
+                        {...register('language')}
+                        disabled
+                        className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none transition-all opacity-70 cursor-not-allowed"
+                        style={{
+                          backgroundColor: theme.colors.surface,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text
+                        }}
+                      >
+                        <option value="en">English (Locked)</option>
+                        <option value="ne">Nepali (Coming Soon)</option>
+                      </select>
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <Lock className="w-3 h-3 text-textSecondary" />
+                      </div>
+                    </div>
+                    {errors.language && <p className="text-xs mt-1 text-red-500">{errors.language.message}</p>}
+                  </div>
+                </div>
+
+                {/* Optional Nepal Tax Info */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      PAN Number <span style={{ color: theme.colors.textSecondary }}>(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      {...register('pan_number')}
+                      placeholder="9-digit PAN"
+                      maxLength={9}
+                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none text-sm"
+                      style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.text }}
+                      onInput={(e) => { (e.target as HTMLInputElement).value = (e.target as HTMLInputElement).value.replace(/\D/g, ''); }}
+                    />
+                    {errors.pan_number && <p className="text-xs mt-1 text-red-500">{errors.pan_number.message}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>
+                      VAT Number <span style={{ color: theme.colors.textSecondary }}>(optional)</span>
+                    </label>
+                    <input
+                      type="text"
+                      {...register('vat_number')}
+                      placeholder="9-digit VAT"
+                      maxLength={9}
+                      className="w-full h-10 px-3 py-2 rounded-lg border focus:ring-2 outline-none text-sm"
+                      style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border, color: theme.colors.text }}
+                      onInput={(e) => { (e.target as HTMLInputElement).value = (e.target as HTMLInputElement).value.replace(/\D/g, ''); }}
+                    />
+                    {errors.vat_number && <p className="text-xs mt-1 text-red-500">{errors.vat_number.message}</p>}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 my-4">
+                  <div className="h-px flex-1" style={{ backgroundColor: theme.colors.border }}></div>
+                  <span
+                    className="text-xs font-semibold uppercase tracking-wider px-3 py-1 rounded-full"
+                    style={{
+                      backgroundColor: `${theme.colors.primary}26`,
+                      color: theme.colors.primary,
+                    }}
+                  >
+                    Owner Details
+                  </span>
+                  <div className="h-px flex-1" style={{ backgroundColor: theme.colors.border }}></div>
                 </div>
 
                 {!isExistingUser && (

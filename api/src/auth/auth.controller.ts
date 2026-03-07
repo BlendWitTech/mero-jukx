@@ -86,6 +86,18 @@ export class AuthController {
   }
 
   @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend email verification link' })
+  @ApiResponse({ status: 200, description: 'Verification email sent if account exists' })
+  async resendVerification(@Body('email') email: string, @Headers('origin') origin?: string) {
+    if (!email || email.trim() === '') {
+      throw new BadRequestException('Email is required');
+    }
+    return this.authService.resendVerificationEmail(email.trim(), origin);
+  }
+
+  @Public()
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request password reset' })

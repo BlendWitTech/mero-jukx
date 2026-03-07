@@ -13,11 +13,25 @@ export class EsewaService {
   private readonly failureUrl: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.merchantId = this.configService.get<string>('ESEWA_MERCHANT_ID') || 'EPAYTEST';
-    this.secretKey = this.configService.get<string>('ESEWA_SECRET_KEY') || '8gBm/:&EnhH.1/q';
-    this.gatewayUrl = this.configService.get<string>('ESEWA_GATEWAY_URL') || 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
+    const isProd = this.configService.get<string>('NODE_ENV') === 'production';
+    const prodMerchantId = this.configService.get<string>('ESEWA_MERCHANT_ID');
+    const prodSecretKey = this.configService.get<string>('ESEWA_SECRET_KEY');
+
+    // Default to test credentials if not in production or if production keys are missing
+    if (isProd && prodMerchantId && prodSecretKey) {
+      this.merchantId = prodMerchantId;
+      this.secretKey = prodSecretKey;
+      this.gatewayUrl = this.configService.get<string>('ESEWA_API_URL') || 'https://epay.esewa.com.np/api/epay/main/v2/form';
+    } else {
+      this.merchantId = this.configService.get<string>('ESEWA_TEST_MERCHANT_ID') || 'EPAYTEST';
+      this.secretKey = this.configService.get<string>('ESEWA_TEST_SECRET_KEY') || '8gBm/:&EnhH.1/q';
+      this.gatewayUrl = this.configService.get<string>('ESEWA_TEST_API_URL') || 'https://rc-epay.esewa.com.np/api/epay/main/v2/form';
+    }
+
     this.successUrl = this.configService.get<string>('ESEWA_SUCCESS_URL') || 'http://localhost:3000/payment/esewa/success';
     this.failureUrl = this.configService.get<string>('ESEWA_FAILURE_URL') || 'http://localhost:3000/payment/esewa/failure';
+
+    this.logger.log(`Initialized eSewa service in ${isProd ? 'production' : 'test'} mode with merchant ID: ${this.merchantId}`);
   }
 
   generateSignature(message: string): string {
@@ -54,6 +68,9 @@ export class EsewaService {
         total_amount: amount.toString(),
         transaction_uuid: transactionId,
       };
+
+      this.logger.log(`Initiating eSewa payment to ${this.gatewayUrl} with signature message: ${signatureMessage}`);
+      this.logger.debug(`eSewa Form Data: ${JSON.stringify(formData)}`);
 
       return {
         gatewayUrl: this.gatewayUrl,
@@ -95,9 +112,13 @@ export class EsewaService {
   }
   async verifyTransaction(transactionUuid: string, totalAmount: number) {
     try {
-      this.logger.log(`Checking eSewa transaction status: ${transactionUuid}, amount: ${totalAmount}`);
+      const verifyUrl = this.configService.get<string>('NODE_ENV') === 'production' && this.merchantId !== 'EPAYTEST'
+        ? (this.configService.get<string>('ESEWA_VERIFY_URL') || 'https://esewa.com.np/api/epay/transaction/status/')
+        : (this.configService.get<string>('ESEWA_TEST_VERIFY_URL') || 'https://rc-epay.esewa.com.np/api/epay/transaction/status/');
 
-      const statusUrl = `https://rc-epay.esewa.com.np/api/epay/transaction/status/`; // Sandbox URL
+      this.logger.log(`Checking eSewa transaction status: ${transactionUuid}, amount: ${totalAmount} at ${verifyUrl}`);
+
+      const statusUrl = verifyUrl;
       // Note: Use prod URL from config in real env
 
       // For v2 Status Check
@@ -112,13 +133,16 @@ export class EsewaService {
       this.logger.log(`eSewa status response: ${JSON.stringify(response.data)}`);
 
       if (response.data.status === 'COMPLETE') {
+        const refId = response.data.refId || response.data.transaction_code;
+        this.logger.log(`eSewa payment verified successfully for ${transactionUuid}. RefId: ${refId}`);
         return {
           status: 'success',
           transactionId: transactionUuid,
-          refId: response.data.refId,
+          refId: refId,
           amount: totalAmount,
         };
       } else {
+        this.logger.warn(`eSewa payment verification failed for ${transactionUuid}. Status: ${response.data.status}`);
         return {
           status: 'failure',
           message: response.data.status || 'Payment not complete'

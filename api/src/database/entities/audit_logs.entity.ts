@@ -11,17 +11,17 @@ import { Organization } from './organizations.entity';
 import { User } from './users.entity';
 
 @Entity('audit_logs')
-@Index(['organization_id'])
-@Index(['user_id'])
-@Index(['action'])
-@Index(['entity_type', 'entity_id'])
-@Index(['created_at'])
+@Index('IDX_AUDIT_LOGS_ORG_ID', ['organization_id'])
+@Index('IDX_AUDIT_LOGS_USER_ID', ['user_id'])
+@Index('IDX_AUDIT_LOGS_ACTION', ['action'])
+@Index('IDX_AUDIT_LOGS_ENTITY', ['entity_type', 'entity_id'])
+@Index('IDX_AUDIT_LOGS_SEVERITY', ['severity'])
+@Index('IDX_AUDIT_LOGS_CREATED_AT', ['created_at'])
 export class AuditLog {
   @PrimaryGeneratedColumn({ type: 'bigint' })
   id: number;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   organization_id: string | null;
 
   @ManyToOne(() => Organization, { nullable: true, onDelete: 'SET NULL' })
@@ -29,7 +29,6 @@ export class AuditLog {
   organization: Organization | null;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   user_id: string | null;
 
   @ManyToOne(() => User, { nullable: true, onDelete: 'SET NULL' })
@@ -37,7 +36,6 @@ export class AuditLog {
   user: User | null;
 
   @Column({ type: 'varchar', length: 100 })
-  @Index()
   action: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
@@ -61,16 +59,14 @@ export class AuditLog {
   @Column({ type: 'json', nullable: true })
   metadata: Record<string, any> | null;
 
-  @Column({ 
-    type: 'enum', 
+  @Column({
+    type: 'enum',
     enum: ['critical', 'warning', 'info'],
     default: 'info',
-    nullable: true 
+    nullable: true
   })
-  @Index()
   severity: 'critical' | 'warning' | 'info';
 
   @CreateDateColumn()
-  @Index()
   created_at: Date;
 }

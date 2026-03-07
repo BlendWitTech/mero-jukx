@@ -23,11 +23,16 @@ export const AppDataSource = new DataSource({
   password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'mero_jugx',
   entities: [
+    // core database entities
     path.join(__dirname, '../entities/**/*.entity{.ts,.js}'),
+    // marketplace shared mero-board entities (moved under api/marketplace)
+    path.join(__dirname, '../../../marketplace/shared/mero-board/entities/**/*.entity{.ts,.js}'),
+    // historic path kept for compatibility (if any apps/ folder exists)
     path.join(__dirname, '../../../apps/marketplace/shared/mero-board/backend/entities/**/*.entity{.ts,.js}'),
+    // additional marketplace modules
     path.join(__dirname, '../../../marketplace/organization/mero-inventory/src/entities/**/*.entity{.ts,.js}'),
   ],
-  migrations: [path.join(__dirname, '[0-9]*-*.ts')],
+  migrations: [path.join(__dirname, '**/[0-9]*-*{.ts,.js}')],
   migrationsTableName: 'migrations',
   synchronize: false,
   logging: true,

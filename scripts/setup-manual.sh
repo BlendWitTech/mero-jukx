@@ -10,6 +10,9 @@ echo "======================================="
 echo ""
 echo "This script will guide you through setting up Mero Jugx step by step."
 echo ""
+echo "If you get stuck, see the README.md and Developer_Guide.md for troubleshooting."
+echo "For Docker setup, use scripts/setup-docker.sh."
+echo "For a full reset, use scripts/reset-all.sh."
 
 # Colors
 RED='\033[0;31m'

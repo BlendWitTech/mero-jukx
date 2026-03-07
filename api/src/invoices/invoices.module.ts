@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
@@ -22,7 +22,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
       Payment,
       App,
     ]),
-    PaymentsModule,
+    forwardRef(() => PaymentsModule),
     CommonModule,
     AuditLogsModule,
   ],
@@ -30,5 +30,5 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
   providers: [InvoicesService],
   exports: [InvoicesService],
 })
-export class InvoicesModule {}
+export class InvoicesModule { }
 

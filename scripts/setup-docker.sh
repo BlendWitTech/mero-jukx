@@ -11,6 +11,11 @@ cd "$PROJECT_ROOT"
 echo "Mero Jugx - Docker Setup"
 echo "========================"
 echo ""
+echo "If you have issues with Docker containers or volumes, run:"
+echo "  docker compose down -v"
+echo "  docker volume prune"
+echo "For a full reset, use scripts/reset-all.sh."
+echo "For manual setup, use scripts/setup-manual.sh."
 
 # Check if Docker is installed
 echo "Checking Docker installation..."

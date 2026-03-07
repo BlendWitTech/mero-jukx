@@ -8,16 +8,18 @@ interface ProtectedRouteProps {
   children: React.ReactNode;
   requiredPermission?: string | null;
   featureName?: string;
+  restrictedForBranches?: boolean;
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   children,
   requiredPermission,
   featureName,
+  restrictedForBranches = false,
 }) => {
   const { hasPermission, isOwner, isLoadingPermissions } = usePermissions();
   const location = useLocation();
-  const { _hasHydrated } = useAuthStore();
+  const { _hasHydrated, organization } = useAuthStore();
 
   // Wait for hydration and permission loading
   if (!_hasHydrated || isLoadingPermissions) {
@@ -25,6 +27,17 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: '#36393f', color: '#ffffff' }}>
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white"></div>
       </div>
+    );
+  }
+
+  // Check if restricted for branches
+  const isBranch = organization?.org_type === 'BRANCH' || !!organization?.parent_id;
+  if (restrictedForBranches && isBranch) {
+    return (
+      <UnauthorizedAccess
+        feature={featureName || location.pathname}
+        message="A branch cannot view this. This feature is only available to the Main Organization."
+      />
     );
   }
 

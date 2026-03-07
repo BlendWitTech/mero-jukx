@@ -9,8 +9,9 @@ export interface Lead {
     phone?: string;
     company?: string;
     job_title?: string;
-    status: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
+    status: 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL_SENT' | 'CONVERTED' | 'LOST' | string;
     source?: string;
+    rating?: 'HOT' | 'WARM' | 'COLD';
     estimated_value?: number;
     assignedToId?: string;
     assignedTo?: {
@@ -20,6 +21,8 @@ export interface Lead {
         lastName: string;
     };
     custom_fields?: Record<string, any>;
+    score?: number;
+    win_loss_reason?: string;
     createdAt: string;
     updatedAt: string;
 }
@@ -36,6 +39,8 @@ export interface CreateLeadDto {
     estimated_value?: number;
     assigned_to?: string;
     custom_fields?: Record<string, any>;
+    score?: number;
+    win_loss_reason?: string;
 }
 
 export interface UpdateLeadDto extends Partial<CreateLeadDto> { }
@@ -61,7 +66,21 @@ export const leadsApi = {
         return response.data;
     },
 
+    convertToClient: async (id: string): Promise<any> => {
+        const response = await apiClient.post(`/crm/leads/${id}/convert`);
+        return response.data;
+    },
+
     deleteLead: async (id: string): Promise<void> => {
         await apiClient.delete(`/crm/leads/${id}`);
     },
+
+    getForecast: async (): Promise<any> => {
+        const response = await apiClient.get('/crm/leads/stats/forecast');
+        return response.data;
+    },
+    bulkCreate: async (data: CreateLeadDto[]): Promise<Lead[]> => {
+        const response = await apiClient.post('/crm/leads/bulk', data);
+        return response.data;
+    }
 };

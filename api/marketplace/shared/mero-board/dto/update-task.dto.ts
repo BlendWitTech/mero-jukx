@@ -28,6 +28,11 @@ export class UpdateTaskDto {
   @IsUUID()
   assignee_id?: string;
 
+  @ApiPropertyOptional({ description: 'Parent Task ID' })
+  @IsOptional()
+  @IsUUID()
+  parent_task_id?: string;
+
   @ApiPropertyOptional({ description: 'Due date' })
   @IsOptional()
   @IsDateString()

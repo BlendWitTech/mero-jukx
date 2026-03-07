@@ -9,10 +9,11 @@ import { OrganizationMember } from '../database/entities/organization_members.en
 import { Role } from '../database/entities/roles.entity';
 import { PermissionsModule } from '../permissions/permissions.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { TaskWatcher } from '../database/entities/task_watchers.entity';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Task, TaskComment, TaskAttachment, OrganizationMember, Role]),
+        TypeOrmModule.forFeature([Task, TaskComment, TaskAttachment, OrganizationMember, Role, TaskWatcher]),
         PermissionsModule,
         AuditLogsModule
     ],

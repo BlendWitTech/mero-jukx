@@ -19,81 +19,123 @@ if (-not (Test-Path .env)) {
 $backendPort = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 $frontendPort = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
 
-if ($backendPort -or $frontendPort) {
-    Write-Host "WARNING: Servers are already running!" -ForegroundColor Yellow
-    if ($backendPort) {
-        $backendPid = $backendPort.OwningProcess
-        Write-Host "  - Backend is running on port 3000 (PID: $backendPid)" -ForegroundColor Yellow
-    }
-    if ($frontendPort) {
-        $frontendPid = $frontendPort.OwningProcess
-        Write-Host "  - Frontend is running on port 3001 (PID: $frontendPid)" -ForegroundColor Yellow
-    }
+if ($backendPort -and $frontendPort) {
+    Write-Host "WARNING: Both servers are already running!" -ForegroundColor Yellow
+    $backendPid = $backendPort.OwningProcess
+    $frontendPid = $frontendPort.OwningProcess
+    Write-Host "  - Backend is running on port 3000 (PID: $backendPid)" -ForegroundColor Yellow
+    Write-Host "  - Frontend is running on port 3001 (PID: $frontendPid)" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Servers are already running. Exiting." -ForegroundColor Green
+    Write-Host "Both servers are already running. Exiting." -ForegroundColor Green
     Write-Host "To stop them, close the server windows or run:" -ForegroundColor White
     Write-Host "  Get-NetTCPConnection -LocalPort 3000,3001 -State Listen | ForEach-Object { Stop-Process -Id `$_.OwningProcess -Force }" -ForegroundColor Gray
     Write-Host ""
     exit 0
 }
 
+# Skip starting individual servers that are already running
+if ($backendPort) {
+    $backendPid = $backendPort.OwningProcess
+    Write-Host "  - Backend already running on port 3000 (PID: $backendPid), skipping..." -ForegroundColor Yellow
+}
+if ($frontendPort) {
+    $frontendPid = $frontendPort.OwningProcess
+    Write-Host "  - Frontend already running on port 3001 (PID: $frontendPid), skipping..." -ForegroundColor Yellow
+}
+
 # Check if Docker Compose file exists and start containers (only postgres and redis)
 if (Test-Path "docker-compose.yml") {
     Write-Host "[0/2] Starting Docker containers (PostgreSQL, Redis)..." -ForegroundColor Blue
+    
+    # Check if Docker is running
+    $dockerInfo = docker info 2>$null
+    if (-not $dockerInfo) {
+        Write-Host "" -ForegroundColor Red
+        Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Red
+        Write-Host "║  ERROR: Docker Desktop is NOT running!                       ║" -ForegroundColor Red
+        Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Red
+        Write-Host "" -ForegroundColor Yellow
+        Write-Host "The application requires PostgreSQL and Redis in Docker." -ForegroundColor Yellow
+        Write-Host "Please start Docker Desktop and try again." -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+
     docker-compose up -d postgres redis 2>&1 | Out-Null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "Docker containers started successfully" -ForegroundColor Green
     }
     else {
-        Write-Host "WARNING: Docker Compose failed. Make sure Docker is running." -ForegroundColor Yellow
-        Write-Host "Continuing anyway..." -ForegroundColor Yellow
+        Write-Host "WARNING: Docker Compose failed. This might be because containers are already starting." -ForegroundColor Yellow
     }
     Write-Host ""
     Start-Sleep -Seconds 3
 }
 
-Write-Host "[1/4] Starting backend server (port 3000)..." -ForegroundColor Blue
-# Start backend in a new PowerShell window with a unique title
-$backendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\api'; `$Host.UI.RawUI.WindowTitle = 'Mero Jugx - Backend (Port 3000)'; Write-Host 'Mero Jugx - Backend Server' -ForegroundColor Cyan; Write-Host 'Port: 3000' -ForegroundColor White; Write-Host ''; nest start --watch" -PassThru
+# Check if database is initialized
+Write-Host "Checking database initialization..." -ForegroundColor Cyan
+npm run db:check 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "╔══════════════════════════════════════════════════════════════╗" -ForegroundColor Yellow
+    Write-Host "║  WARNING: Database is NOT initialized!                     ║" -ForegroundColor Yellow
+    Write-Host "╚══════════════════════════════════════════════════════════════╝" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "The database tables have not been created yet." -ForegroundColor Yellow
+    Write-Host "This will cause 'relation does not exist' errors when the app starts." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "To initialize the database, run:" -ForegroundColor White
+    Write-Host "  npm run db:init" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "This will:" -ForegroundColor Gray
+    Write-Host "  • Run all database migrations (create tables)" -ForegroundColor Gray
+    Write-Host "  • Seed the database with initial data" -ForegroundColor Gray
+    Write-Host ""
+    
+    $response = Read-Host "Do you want to continue starting the servers anyway? (y/N)"
+    if ($response -ne "y" -and $response -ne "Y") {
+        Write-Host ""
+        Write-Host "Startup cancelled. Please run 'npm run db:init' first." -ForegroundColor Yellow
+        Write-Host ""
+        exit 1
+    }
+    Write-Host ""
+    Write-Host "Continuing with uninitialized database..." -ForegroundColor Yellow
+    Write-Host "Note: You may see database errors until you run 'npm run db:init'" -ForegroundColor Yellow
+    Write-Host ""
+}
+else {
+    Write-Host "✓ Database is initialized" -ForegroundColor Green
+    Write-Host ""
+}
 
-Start-Sleep -Seconds 3
+Write-Host "[1/4] Starting backend server (port 3000)..." -ForegroundColor Blue
+if ($backendPort) {
+    Write-Host "  ✓ Backend already running, skipping." -ForegroundColor Green
+    $backendWindow = $null
+}
+else {
+    $backendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\api'; `$Host.UI.RawUI.WindowTitle = 'Mero Jugx - Backend (Port 3000)'; Write-Host 'Mero Jugx - Backend Server' -ForegroundColor Cyan; Write-Host 'Port: 3000' -ForegroundColor White; Write-Host ''; npm run dev:backend" -PassThru
+    Start-Sleep -Seconds 3
+}
 
 Write-Host "[2/4] Starting app server (port 3001)..." -ForegroundColor Blue
-# Start app in a new PowerShell window with a unique title
-$frontendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\app'; `$Host.UI.RawUI.WindowTitle = 'Mero Jugx - App (Port 3001)'; Write-Host 'Mero Jugx - App Server' -ForegroundColor Cyan; Write-Host 'Port: 3001' -ForegroundColor White; Write-Host ''; npm run dev" -PassThru
+if ($frontendPort) {
+    Write-Host "  ✓ Frontend already running, skipping." -ForegroundColor Green
+    $frontendWindow = $null
+}
+else {
+    $frontendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\app'; `$Host.UI.RawUI.WindowTitle = 'Mero Jugx - App (Port 3001)'; Write-Host 'Mero Jugx - App Server' -ForegroundColor Cyan; Write-Host 'Port: 3001' -ForegroundColor White; Write-Host ''; npm run dev" -PassThru
+    Start-Sleep -Seconds 2
+}
 
 Start-Sleep -Seconds 2
 
-# Start system-admin backend
-Write-Host "[3/4] Starting system-admin backend server (port 3002)..." -ForegroundColor Blue
-if (Test-Path "apps/system-admin/backend") {
-    $systemAdminBackendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\apps\system-admin\backend'; `$Host.UI.RawUI.WindowTitle = 'System Admin - Backend (Port 3002)'; Write-Host 'System Admin - Backend Server' -ForegroundColor Cyan; Write-Host 'Port: 3002' -ForegroundColor White; Write-Host ''; npm run start:dev" -PassThru
-    Start-Sleep -Seconds 2
-}
-else {
-    Write-Host "  ⚠ System-admin backend directory not found, skipping..." -ForegroundColor Yellow
-    $systemAdminBackendWindow = $null
-}
-
-# Start system-admin frontend
-Write-Host "[4/4] Starting system-admin frontend server (port 3003)..." -ForegroundColor Blue
-if (Test-Path "apps/system-admin/frontend") {
-    $systemAdminFrontendWindow = Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PWD\apps\system-admin\frontend'; `$Host.UI.RawUI.WindowTitle = 'System Admin - Frontend (Port 3003)'; Write-Host 'System Admin - Frontend Server' -ForegroundColor Cyan; Write-Host 'Port: 3003' -ForegroundColor White; Write-Host ''; npm run dev" -PassThru
-    Start-Sleep -Seconds 2
-}
-else {
-    Write-Host "  ⚠ System-admin frontend directory not found, skipping..." -ForegroundColor Yellow
-    $systemAdminFrontendWindow = $null
-}
+# Note: All components are currently in api/ and app/
 
 
 # Verify servers started
 $backendCheck = Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-$frontendCheck = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-$systemAdminBackendCheck = Get-NetTCPConnection -LocalPort 3002 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-$systemAdminFrontendCheck = Get-NetTCPConnection -LocalPort 3003 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
-$meroCrmBackendCheck = $null
-$meroCrmFrontendCheck = $null
 
 Write-Host ""
 Write-Host "===========================================" -ForegroundColor Cyan
@@ -119,23 +161,6 @@ else {
 }
 Write-Host "  API Docs: http://localhost:3000/api/docs" -ForegroundColor White
 Write-Host ""
-if ($systemAdminBackendWindow -and $systemAdminFrontendWindow) {
-    Write-Host "System Admin:" -ForegroundColor White
-    if ($systemAdminBackendCheck) {
-        Write-Host "  Backend:  http://localhost:3002" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Backend:  Starting... (check the system-admin backend window)" -ForegroundColor Yellow
-    }
-    if ($systemAdminFrontendCheck) {
-        Write-Host "  Frontend: http://localhost:3003" -ForegroundColor Green
-    }
-    else {
-        Write-Host "  Frontend: Starting... (check the system-admin frontend window)" -ForegroundColor Yellow
-    }
-    Write-Host "  API Docs: http://localhost:3002/api-docs" -ForegroundColor White
-    Write-Host ""
-}
 Write-Host "===========================================" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Servers are running in separate windows:" -ForegroundColor Yellow
@@ -157,7 +182,7 @@ try {
     while ($true) {
         Start-Sleep -Seconds 1
         # Check if windows are still open
-        $windowsClosed = $backendWindow.HasExited -or $frontendWindow.HasExited
+        $windowsClosed = ($backendWindow -and $backendWindow.HasExited) -or ($frontendWindow -and $frontendWindow.HasExited)
         if ($systemAdminBackendWindow) {
             $windowsClosed = $windowsClosed -or $systemAdminBackendWindow.HasExited
         }

@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { clientsApi, Client } from '../../api/clients';
-import { Card, Button, Input } from '@shared';
-import { Plus, Search, Edit, Trash2, Eye, RefreshCw, Users as UsersIcon } from 'lucide-react';
+import { Card, Button, Input, Badge } from '@shared';
+import { Plus, Search, Edit, Trash2, Eye, RefreshCw, Users as UsersIcon, Upload, Filter } from 'lucide-react';
 import { toast } from '@shared';
 import { useAppContext } from '../../contexts/AppContext';
+import { CsvImportModal } from '@frontend/components/shared/CsvImportModal';
 
 export default function ClientsListPage() {
     const { theme } = useTheme();
@@ -19,6 +20,8 @@ export default function ClientsListPage() {
     const [limit] = useState(10);
     const [search, setSearch] = useState('');
     const [searchDebounce, setSearchDebounce] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -29,14 +32,22 @@ export default function ClientsListPage() {
 
     useEffect(() => {
         fetchClients();
-    }, [page, searchDebounce]);
+    }, [page, searchDebounce, categoryFilter]);
 
     const fetchClients = async () => {
         try {
             setLoading(true);
             const response = await clientsApi.getClients(page, limit, searchDebounce || undefined);
-            setClients(response.data);
-            setTotal(response.total);
+
+            // Client-side category filtering since backend pagination might not support it natively yet
+            // If backend supports category param later, add it to getClients call.
+            let filteredData = response.data;
+            if (categoryFilter) {
+                filteredData = filteredData.filter(c => c.category === categoryFilter);
+            }
+
+            setClients(filteredData);
+            setTotal(categoryFilter ? filteredData.length : response.total); // Approximate pagination behavior
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Failed to fetch clients');
         } finally {
@@ -55,6 +66,18 @@ export default function ClientsListPage() {
             fetchClients();
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Failed to delete client');
+        }
+    };
+
+    const handleBulkImport = async (data: any[]) => {
+        try {
+            await clientsApi.bulkCreateClient(data);
+            toast.success(`Successfully imported ${data.length} clients`);
+            setIsImportModalOpen(false);
+            fetchClients();
+        } catch (error: any) {
+            toast.error(error.message || 'Failed to import clients');
+            throw error;
         }
     };
 
@@ -77,12 +100,18 @@ export default function ClientsListPage() {
                         </p>
                     </div>
                 </div>
-                <Link to={buildHref('/clients/new')}>
-                    <Button variant="primary" className="shadow-lg shadow-primary/20 scale-105 active:scale-95 transition-transform px-6">
-                        <Plus className="h-5 w-5 mr-2" />
-                        Add New Client
+                <div className="flex items-center gap-3">
+                    <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="px-4 shadow-sm border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors rounded-xl font-bold">
+                        <Upload className="h-5 w-5 mr-2" />
+                        Bulk Import
                     </Button>
-                </Link>
+                    <Link to={buildHref('/clients/new')}>
+                        <Button variant="primary" className="shadow-lg shadow-primary/20 scale-105 active:scale-95 transition-transform px-6 rounded-xl font-bold">
+                            <Plus className="h-5 w-5 mr-2" />
+                            Add New Client
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             {/* Search and Filters */}
@@ -102,6 +131,26 @@ export default function ClientsListPage() {
                             style={{ borderRadius: '12px' }}
                         />
                     </div>
+
+                    <div className="w-full md:w-48 relative border-l pl-4" style={{ borderColor: theme.colors.border }}>
+                        <div className="flex items-center gap-2 mb-1">
+                            <Filter className="h-4 w-4" style={{ color: theme.colors.textSecondary }} />
+                            <span className="text-xs font-bold uppercase" style={{ color: theme.colors.textSecondary }}>Category</span>
+                        </div>
+                        <select
+                            value={categoryFilter}
+                            onChange={(e) => setCategoryFilter(e.target.value)}
+                            className="w-full bg-transparent outline-none cursor-pointer font-medium"
+                            style={{ color: theme.colors.text }}
+                        >
+                            <option value="">All Categories</option>
+                            <option value="CUSTOMER">Customers</option>
+                            <option value="LEAD">Leads</option>
+                            <option value="VENDOR">Vendors</option>
+                            <option value="PARTNER">Partners</option>
+                        </select>
+                    </div>
+
                     <Button
                         variant="secondary"
                         onClick={fetchClients}
@@ -147,17 +196,14 @@ export default function ClientsListPage() {
                             <table className="w-full">
                                 <thead>
                                     <tr style={{ borderBottom: `1px solid ${theme.colors.border}` }}>
-                                        <th className="text-left p-4 font-semibold" style={{ color: theme.colors.text }}>
-                                            Name
+                                        <th className="text-left p-4 font-semibold w-1/4" style={{ color: theme.colors.text }}>
+                                            Client info
                                         </th>
                                         <th className="text-left p-4 font-semibold" style={{ color: theme.colors.text }}>
-                                            Email
+                                            Contact
                                         </th>
                                         <th className="text-left p-4 font-semibold" style={{ color: theme.colors.text }}>
-                                            Phone
-                                        </th>
-                                        <th className="text-left p-4 font-semibold" style={{ color: theme.colors.text }}>
-                                            Company
+                                            Tags
                                         </th>
                                         <th className="text-left p-4 font-semibold" style={{ color: theme.colors.text }}>
                                             Assigned To
@@ -181,18 +227,37 @@ export default function ClientsListPage() {
                                             }}
                                         >
                                             <td className="p-4">
-                                                <div className="font-medium" style={{ color: theme.colors.text }}>
+                                                <div className="font-bold text-base mb-1" style={{ color: theme.colors.text }}>
                                                     {client.name}
                                                 </div>
+                                                <div className="flex items-center gap-2">
+                                                    {client.category && (
+                                                        <Badge variant={client.category === 'CUSTOMER' ? 'success' : client.category === 'LEAD' ? 'warning' : 'secondary'} className="text-[10px]">
+                                                            {client.category}
+                                                        </Badge>
+                                                    )}
+                                                    <span className="text-xs" style={{ color: theme.colors.textSecondary }}>{client.company || '-'}</span>
+                                                </div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="text-sm font-medium" style={{ color: theme.colors.text }}>{client.email}</div>
+                                                <div className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>{client.phone || '-'}</div>
                                             </td>
                                             <td className="p-4" style={{ color: theme.colors.textSecondary }}>
-                                                {client.email}
-                                            </td>
-                                            <td className="p-4" style={{ color: theme.colors.textSecondary }}>
-                                                {client.phone || '-'}
-                                            </td>
-                                            <td className="p-4" style={{ color: theme.colors.textSecondary }}>
-                                                {client.company || '-'}
+                                                {client.tags && client.tags.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1 max-w-[200px]">
+                                                        {client.tags.slice(0, 3).map(tag => (
+                                                            <span key={tag} className="px-2 py-0.5 text-[10px] rounded bg-black/5 dark:bg-white/10 truncate max-w-[80px]" title={tag}>
+                                                                {tag}
+                                                            </span>
+                                                        ))}
+                                                        {client.tags.length > 3 && (
+                                                            <span className="px-1 py-0.5 text-[10px] rounded bg-black/5 dark:bg-white/10">+{client.tags.length - 3}</span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="opacity-50 text-sm">-</span>
+                                                )}
                                             </td>
                                             <td className="p-4" style={{ color: theme.colors.textSecondary }}>
                                                 {client.assignedTo
@@ -287,6 +352,15 @@ export default function ClientsListPage() {
                     </>
                 )}
             </Card>
+
+            <CsvImportModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onImport={handleBulkImport}
+                title="Import Clients"
+                expectedHeaders={['name', 'email', 'phone', 'company', 'address', 'city', 'state', 'country']}
+                templateHeaders={['name', 'email', 'phone', 'company', 'address', 'city', 'state', 'country']}
+            />
         </div>
     );
 }

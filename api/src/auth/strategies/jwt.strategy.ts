@@ -10,6 +10,8 @@ import {
   OrganizationMemberStatus,
 } from '../../database/entities/organization_members.entity';
 
+import { HierarchicalIsolationService } from '../../common/services/hierarchical-isolation.service';
+
 export interface JwtPayload {
   sub: string; // user id (impersonated user if impersonating)
   email: string;
@@ -30,6 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     private userRepository: Repository<User>,
     @InjectRepository(OrganizationMember)
     private memberRepository: Repository<OrganizationMember>,
+    private hierarchicalIsolationService: HierarchicalIsolationService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -105,10 +108,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
+    // Get accessible organization IDs (for hierarchical visibility)
+    const accessibleOrganizationIds = await this.hierarchicalIsolationService.getAccessibleOrganizationIds(
+      payload.organization_id,
+    );
+
     return {
       userId: user.id,
       email: user.email,
       organizationId: payload.organization_id,
+      accessibleOrganizationIds,
       roleId: payload.role_id,
       impersonatedBy: payload.impersonated_by,
       user,

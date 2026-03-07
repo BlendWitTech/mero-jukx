@@ -50,6 +50,46 @@ export class AppSubscriptionSchedulerService {
   ) {}
 
   /**
+   * Check for expired trials and mark them as EXPIRED (runs every hour)
+   */
+  @Cron(CronExpression.EVERY_HOUR)
+  async expireTrials() {
+    this.logger.log('Checking for expired app trials...');
+
+    const now = new Date();
+
+    const expiredTrials = await this.orgAppRepository.find({
+      where: {
+        status: OrganizationAppStatus.TRIAL,
+        trial_ends_at: LessThanOrEqual(now),
+      },
+      relations: ['app', 'organization'],
+    });
+
+    for (const subscription of expiredTrials) {
+      try {
+        await this.orgAppRepository.update(
+          { id: subscription.id },
+          { status: OrganizationAppStatus.EXPIRED },
+        );
+
+        await this.notificationHelper.notifyAppSubscriptionExpired(
+          subscription.organization_id,
+          subscription.app?.name || 'App',
+        );
+
+        this.logger.log(
+          `Trial expired for app ${subscription.app?.name} in org ${subscription.organization_id}`,
+        );
+      } catch (error) {
+        this.logger.error(`Error expiring trial subscription ${subscription.id}:`, error);
+      }
+    }
+
+    this.logger.log(`Expired ${expiredTrials.length} trial subscriptions`);
+  }
+
+  /**
    * Check for app subscriptions expiring in 7 days (runs daily at 9 AM)
    */
   @Cron(CronExpression.EVERY_DAY_AT_9AM)

@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Ticket, TicketPriority, TicketSource, TicketStatus } from '../database/entities/tickets.entity';
 import { TicketComment } from '../database/entities/ticket_comments.entity';
 import { TicketActivity, TicketActivityType } from '../database/entities/ticket_activities.entity';
@@ -216,7 +216,7 @@ export class TicketsService {
     return this.ticketRepository.save(ticket);
   }
 
-  async findAll(userId: string, organizationId: string, query: TicketQueryDto) {
+  async findAll(userId: string, organizationId: string, query: TicketQueryDto, accessibleOrganizationIds?: string[]) {
     try {
       // Check ticket system access
       const hasAccess = await this.hasTicketAccess(organizationId);
@@ -233,9 +233,13 @@ export class TicketsService {
         throw new BadRequestException('Invalid organization ID');
       }
 
+      const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+        ? accessibleOrganizationIds
+        : [organizationId];
+
       const qb = this.ticketRepository
         .createQueryBuilder('ticket')
-        .where('ticket.organization_id = :organizationId', { organizationId });
+        .where('ticket.organization_id IN (:...orgIds)', { orgIds });
 
       if (query.status) {
         qb.andWhere('ticket.status = :status', { status: query.status });
@@ -304,7 +308,7 @@ export class TicketsService {
     }
   }
 
-  async findOne(userId: string, organizationId: string, ticketId: string) {
+  async findOne(userId: string, organizationId: string, ticketId: string, accessibleOrganizationIds?: string[]) {
     // Check ticket system access
     const hasAccess = await this.hasTicketAccess(organizationId);
     if (!hasAccess) {
@@ -315,8 +319,12 @@ export class TicketsService {
 
     await this.ensureMembership(userId, organizationId);
 
+    const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
     const ticket = await this.ticketRepository.findOne({
-      where: { id: ticketId, organization_id: organizationId },
+      where: { id: ticketId, organization_id: In(orgIds) },
       relations: ['comments'],
     });
 
@@ -327,7 +335,7 @@ export class TicketsService {
     return ticket;
   }
 
-  async updateTicket(userId: string, organizationId: string, ticketId: string, dto: UpdateTicketDto) {
+  async updateTicket(userId: string, organizationId: string, ticketId: string, dto: UpdateTicketDto, accessibleOrganizationIds?: string[]) {
     // Check ticket system access
     const hasAccess = await this.hasTicketAccess(organizationId);
     if (!hasAccess) {
@@ -337,7 +345,11 @@ export class TicketsService {
     }
 
     const member = await this.ensureMembership(userId, organizationId);
-    const ticket = await this.ticketRepository.findOne({ where: { id: ticketId, organization_id: organizationId } });
+    const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
+    const ticket = await this.ticketRepository.findOne({ where: { id: ticketId, organization_id: In(orgIds) } });
 
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
@@ -449,7 +461,7 @@ export class TicketsService {
     return ticket;
   }
 
-  async addComment(userId: string, organizationId: string, ticketId: string, dto: AddCommentDto) {
+  async addComment(userId: string, organizationId: string, ticketId: string, dto: AddCommentDto, accessibleOrganizationIds?: string[]) {
     // Check ticket system access
     const hasAccess = await this.hasTicketAccess(organizationId);
     if (!hasAccess) {
@@ -460,7 +472,11 @@ export class TicketsService {
 
     await this.ensureMembership(userId, organizationId);
 
-    const ticket = await this.ticketRepository.findOne({ where: { id: ticketId, organization_id: organizationId } });
+    const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
+    const ticket = await this.ticketRepository.findOne({ where: { id: ticketId, organization_id: In(orgIds) } });
     if (!ticket) {
       throw new NotFoundException('Ticket not found');
     }
@@ -542,10 +558,16 @@ export class TicketsService {
     organizationId: string,
     ticketId: string,
     dto: TransferTicketToBoardDto,
+    accessibleOrganizationIds?: string[],
   ) {
     const member = await this.ensureMembership(userId, organizationId);
+
+    const orgIds = accessibleOrganizationIds && accessibleOrganizationIds.length > 0
+      ? accessibleOrganizationIds
+      : [organizationId];
+
     const ticket = await this.ticketRepository.findOne({
-      where: { id: ticketId, organization_id: organizationId },
+      where: { id: ticketId, organization_id: In(orgIds) },
     });
 
     if (!ticket) {

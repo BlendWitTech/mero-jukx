@@ -8,6 +8,7 @@ import SalesOrderDetailPage from './pages/SalesOrderDetailPage';
 import ShipmentsPage from './pages/ShipmentsPage';
 import StockMovementsPage from './pages/StockMovementsPage';
 import StockAdjustmentsPage from './pages/StockAdjustmentsPage';
+import ValuationPage from './pages/ValuationPage';
 import InventorySettingsPage from './pages/InventorySettingsPage';
 import InventoryLayout from './layouts/InventoryLayout';
 import { AppProvider } from './contexts/AppContext';
@@ -38,6 +39,7 @@ export default function MeroInventoryRouter({ appSlug }: MeroInventoryRouterProp
                     <Route path="/shipments" element={<ShipmentsPage />} />
                     <Route path="/movements" element={<StockMovementsPage />} />
                     <Route path="/adjustments" element={<StockAdjustmentsPage />} />
+                    <Route path="/reports/valuation" element={<ValuationPage />} />
                     <Route path="/settings" element={<InventorySettingsPage />} />
                 </Route>
                 <Route path="*" element={<Navigate to="" replace />} />

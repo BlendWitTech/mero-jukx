@@ -1,6 +1,0 @@
-marketplace/organization/mero-crm/src/layouts/DashboardLayout.tsx(60,36): error TS2551: Property 'firstName' does not exist on type 'User'. Did you mean 'first_name'?
-marketplace/organization/mero-crm/src/layouts/DashboardLayout.tsx(60,54): error TS2551: Property 'lastName' does not exist on type 'User'. Did you mean 'last_name'?
-marketplace/organization/mero-inventory/pages/ProductsPage.tsx(150,48): error TS2322: Type '"outline" | "destructive"' is not assignable to type '"default" | "success" | "warning" | "info" | "primary" | "secondary" | "danger" | "outline" | undefined'.
-  Type '"destructive"' is not assignable to type '"default" | "success" | "warning" | "info" | "primary" | "secondary" | "danger" | "outline" | undefined'.
-marketplace/shared/mero-board/pages/BoardsPage.tsx(340,17): error TS2322: Type '{ isOpen: boolean; title: string; message: string; confirmLabel: string; cancelLabel: string; onConfirm: () => any; onCancel: () => any; isLoading: boolean; variant: "danger"; theme: any; }' is not assignable to type 'IntrinsicAttributes & ConfirmDialogProps'.
-  Property 'confirmLabel' does not exist on type 'IntrinsicAttributes & ConfirmDialogProps'.

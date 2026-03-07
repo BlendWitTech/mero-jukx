@@ -14,10 +14,10 @@ export class ShipmentsController {
 
     @Post()
     create(
-        @Body('salesOrderId') salesOrderId: string,
+        @Body() body: any,
         @Request() req
     ) {
-        return this.shipmentsService.create(salesOrderId, req.user.organizationId, req.user.userId);
+        return this.shipmentsService.create(body.salesOrderId, req.user.organizationId, req.user.userId, body);
     }
 
     @Get()

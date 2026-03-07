@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Package, Trash2, Edit, Filter } from 'lucide-react';
+import { Plus, Search, Package, Trash2, Edit, Filter, Scan, Upload } from 'lucide-react';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import { Card } from '@shared/frontend/components/ui/Card';
 import { Button } from '@shared/frontend/components/ui/Button';
@@ -10,6 +10,8 @@ import toast from '@shared/frontend/hooks/useToast';
 import { ConfirmDialog } from '@shared/frontend/components/feedback/ConfirmDialog';
 import { useAppContext } from '../../contexts/AppContext';
 import { Link } from 'react-router-dom';
+import BarcodeScanner from '../../components/BarcodeScanner';
+import { CsvImportModal } from '@frontend/components/shared/CsvImportModal';
 
 interface Product {
     id: string;
@@ -28,6 +30,8 @@ export default function ProductsListPage() {
     const queryClient = useQueryClient();
     const [searchTerm, setSearchTerm] = useState('');
     const [productToDelete, setProductToDelete] = useState<string | null>(null);
+    const [showScanner, setShowScanner] = useState(false);
+    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
     const { data: products = [], isLoading } = useQuery({
         queryKey: ['products', organizationId],
@@ -54,6 +58,20 @@ export default function ProductsListPage() {
         },
     });
 
+    const bulkCreateMutation = useMutation({
+        mutationFn: async (data: any[]) => {
+            await api.post('/inventory/products/bulk', data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['products'] });
+            toast.success('Products imported successfully');
+            setIsImportModalOpen(false);
+        },
+        onError: (error: any) => {
+            toast.error(error.response?.data?.message || 'Failed to import products');
+        },
+    });
+
     const filteredProducts = products.filter((p: Product) =>
         p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         p.sku.toLowerCase().includes(searchTerm.toLowerCase())
@@ -70,12 +88,18 @@ export default function ProductsListPage() {
                         Manage your product catalog and stock levels.
                     </p>
                 </div>
-                <Link to={buildHref('/products/new')}>
-                    <Button>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Product
+                <div className="flex items-center gap-2">
+                    <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Import CSV
                     </Button>
-                </Link>
+                    <Link to={buildHref('/products/new')}>
+                        <Button>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Add Product
+                        </Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="flex items-center gap-4">
@@ -88,7 +112,17 @@ export default function ProductsListPage() {
                         className="pl-9"
                     />
                 </div>
+                <Button variant="outline" onClick={() => setShowScanner(true)}>
+                    <Scan className="h-4 w-4 mr-2" />
+                    Scan Barcode
+                </Button>
             </div>
+
+            {showScanner && (
+                <BarcodeScanner
+                    onClose={() => setShowScanner(false)}
+                />
+            )}
 
             <Card style={{ backgroundColor: theme.colors.surface }}>
                 <div className="overflow-x-auto">
@@ -163,6 +197,15 @@ export default function ProductsListPage() {
                 message="Are you sure you want to delete this product? This action cannot be undone."
                 variant="danger"
                 theme={theme}
+            />
+
+            <CsvImportModal
+                isOpen={isImportModalOpen}
+                onClose={() => setIsImportModalOpen(false)}
+                onImport={async (data) => bulkCreateMutation.mutate(data)}
+                title="Import Products"
+                expectedHeaders={['name', 'sku', 'category', 'selling_price', 'cost_price', 'description']}
+                templateHeaders={['name', 'sku', 'category', 'selling_price', 'cost_price', 'description']}
             />
         </div>
     );

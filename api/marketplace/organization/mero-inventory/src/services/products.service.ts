@@ -24,8 +24,15 @@ export class ProductsService {
 
     async findAll(organizationId: string): Promise<Product[]> {
         return this.productRepository.find({
-            where: { organization_id: organizationId },
+            where: { organization_id: organizationId, parent_id: null }, // List only parent products by default
             order: { created_at: 'DESC' },
+            relations: ['stocks', 'stocks.warehouse', 'variants'],
+        });
+    }
+
+    async getVariants(parentId: string, organizationId: string): Promise<Product[]> {
+        return this.productRepository.find({
+            where: { parent_id: parentId, organization_id: organizationId },
             relations: ['stocks', 'stocks.warehouse'],
         });
     }
@@ -56,6 +63,20 @@ export class ProductsService {
         await this.productRepository.softRemove(product);
     }
 
+    async bulkCreateVariants(parentId: string, variants: CreateProductDto[], organizationId: string): Promise<Product[]> {
+        const parent = await this.findOne(parentId, organizationId);
+
+        const products = variants.map(v => this.productRepository.create({
+            ...v,
+            parent_id: parentId,
+            organization_id: organizationId,
+            category: parent.category, // Inherit category
+            unit: parent.unit, // Inherit unit
+        }));
+
+        return this.productRepository.save(products);
+    }
+
     async adjustStock(productId: string, data: any, organizationId: string): Promise<void> {
         const { warehouse_id, type, quantity, reason } = data;
         let stock = await this.stockRepository.findOne({
@@ -80,5 +101,12 @@ export class ProductsService {
 
         await this.stockRepository.save(stock);
     }
-}
 
+    async bulkCreate(productsData: CreateProductDto[], organizationId: string): Promise<Product[]> {
+        const products = productsData.map(dto => this.productRepository.create({
+            ...dto,
+            organization_id: organizationId,
+        }));
+        return this.productRepository.save(products);
+    }
+}

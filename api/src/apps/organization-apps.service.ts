@@ -4,9 +4,11 @@ import {
   BadRequestException,
   ForbiddenException,
   ConflictException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { App } from '../database/entities/apps.entity';
 import {
   OrganizationApp,
@@ -59,6 +61,7 @@ export class OrganizationAppsService {
     private dataSource: DataSource,
     private appsService: AppsService,
     private appAccessService: AppAccessService,
+    @Inject(forwardRef(() => PaymentsService))
     private paymentsService: PaymentsService,
     private auditLogsService: AuditLogsService,
     private emailService: EmailService,
@@ -196,13 +199,11 @@ export class OrganizationAppsService {
     });
 
     if (existingSubscription) {
-      if (
-        existingSubscription.status === OrganizationAppStatus.ACTIVE ||
-        existingSubscription.status === OrganizationAppStatus.TRIAL
-      ) {
-        throw new ConflictException('Organization is already subscribed to this app');
+      if (existingSubscription.status === OrganizationAppStatus.ACTIVE) {
+        throw new ConflictException('Organization is already subscribed and active for this app');
       }
-      // If cancelled/expired, we can create a new subscription but keep trial_used info
+      // If cancelled/expired/pending_payment or TRIAL, we can create/update subscription
+      // Note: We allow purchasing even if in TRIAL status (converts trial to paid)
     }
 
     const now = new Date();
@@ -223,6 +224,9 @@ export class OrganizationAppsService {
       trialEndsAt.setDate(trialEndsAt.getDate() + app.trial_days);
       status = OrganizationAppStatus.TRIAL;
       needsPayment = false; // Payment will be required after trial
+    } else if (Number(app.price) > 0) {
+      // If payment is required and NOT a trial, set status to pending
+      status = OrganizationAppStatus.PENDING_PAYMENT;
     }
 
     // Calculate subscription end date
@@ -251,20 +255,37 @@ export class OrganizationAppsService {
       }
     }
 
-    // Create subscription
-    const organizationApp = this.orgAppRepository.create({
-      organization_id: orgId,
-      app_id: dto.app_id,
-      status,
-      subscription_start: subscriptionStart,
-      subscription_end: subscriptionEnd,
-      next_billing_date: needsPayment ? subscriptionEnd : null,
-      trial_ends_at: trialEndsAt,
-      trial_used: existingSubscription?.trial_used || !!trialEndsAt,
-      auto_renew: dto.auto_renew ?? true,
-      subscription_price: app.price,
-      billing_period: billingPeriod,
-    });
+    // Create or Update subscription
+    let organizationApp: OrganizationApp;
+
+    if (existingSubscription && existingSubscription.status === OrganizationAppStatus.PENDING_PAYMENT) {
+      // Reuse existing pending subscription
+      organizationApp = existingSubscription;
+      organizationApp.status = status;
+      organizationApp.subscription_start = subscriptionStart;
+      organizationApp.subscription_end = subscriptionEnd;
+      organizationApp.next_billing_date = needsPayment ? subscriptionEnd : null;
+      organizationApp.trial_ends_at = trialEndsAt;
+      organizationApp.trial_used = existingSubscription?.trial_used || !!trialEndsAt;
+      organizationApp.auto_renew = dto.auto_renew ?? true;
+      organizationApp.subscription_price = app.price;
+      organizationApp.billing_period = billingPeriod;
+    } else {
+      // Create new subscription
+      organizationApp = this.orgAppRepository.create({
+        organization_id: orgId,
+        app_id: dto.app_id,
+        status,
+        subscription_start: subscriptionStart,
+        subscription_end: subscriptionEnd,
+        next_billing_date: needsPayment ? subscriptionEnd : null,
+        trial_ends_at: trialEndsAt,
+        trial_used: existingSubscription?.trial_used || !!trialEndsAt,
+        auto_renew: dto.auto_renew ?? true,
+        subscription_price: app.price,
+        billing_period: billingPeriod,
+      });
+    }
 
     let payment: Payment | undefined;
     let paymentUrl: string | undefined;
@@ -272,15 +293,36 @@ export class OrganizationAppsService {
 
     // Create payment if needed
     if (needsPayment) {
-      // Convert amount based on payment gateway
-      // App prices are stored in USD, convert to NPR for eSewa
-      const gateway = dto.payment_method === 'stripe' ? PaymentGateway.STRIPE : PaymentGateway.ESEWA;
-      let paymentAmount = app.price;
+      // Determine gateway
+      const gateway =
+        dto.payment_method === 'stripe'
+          ? PaymentGateway.STRIPE
+          : dto.payment_method === 'ime_pay'
+          ? PaymentGateway.IME_PAY
+          : PaymentGateway.ESEWA;
 
-      if (gateway === PaymentGateway.ESEWA) {
-        // Convert USD to NPR: 1 USD = 1 / NPR_TO_USD_RATE NPR
+      let paymentAmount = Number(app.price);
+
+      // Annual subscription: 20% discount (billed as 12 months × 0.80)
+      if (billingPeriod === OrganizationAppBillingPeriod.YEARLY) {
+        paymentAmount = paymentAmount * 12 * 0.80;
+      }
+
+      // Bundle discount: 15% off when org already has 2+ active/trial apps
+      const activeAppsCount = await this.orgAppRepository.count({
+        where: {
+          organization_id: orgId,
+          status: In([OrganizationAppStatus.ACTIVE, OrganizationAppStatus.TRIAL]),
+        },
+      });
+      if (activeAppsCount >= 2) {
+        paymentAmount = paymentAmount * 0.85;
+      }
+
+      // Convert USD to NPR for local gateways
+      if (gateway === PaymentGateway.ESEWA || gateway === PaymentGateway.IME_PAY) {
         const nprToUsdRate = this.configService.get<number>('currency.nprToUsdRate') || 0.0075;
-        paymentAmount = app.price / nprToUsdRate;
+        paymentAmount = paymentAmount / nprToUsdRate;
       }
 
       const paymentResult = await this.paymentsService.createPayment(userId, orgId, {
@@ -292,8 +334,9 @@ export class OrganizationAppsService {
           app_id: app.id,
           app_name: app.name,
           billing_period: dto.billing_period,
+          user_ids: dto.user_ids || [], // Store target users for deferred access granting
         },
-      });
+      }, origin);
 
       payment = await this.paymentRepository.findOne({ where: { id: paymentResult.payment.id } });
       paymentUrl = paymentResult.payment_form?.formUrl;
@@ -308,7 +351,7 @@ export class OrganizationAppsService {
           organization_id: orgId,
           app_id: app.id,
           payment_id: payment.id,
-          amount: Number(app.price),
+          amount: Number(payment.amount),
           currency: payment.currency,
           status: InvoiceStatus.UNPAID,
           due_date: dueDate,
@@ -324,7 +367,17 @@ export class OrganizationAppsService {
 
     const savedSubscription = await this.orgAppRepository.save(organizationApp);
 
-    // Increment app subscription count
+    // Skip immediate access granting and notifications if payment is pending
+    if (status === OrganizationAppStatus.PENDING_PAYMENT) {
+      return {
+        organization_app: savedSubscription,
+        payment,
+        payment_url: paymentUrl,
+        payment_form: paymentForm,
+      };
+    }
+
+    // Increment app subscription count (only for trials or free apps, paid apps incremented on payment verify)
     await this.appsService.incrementSubscriptionCount(app.id);
 
     // Get purchasing user's membership and role
@@ -488,7 +541,7 @@ export class OrganizationAppsService {
           app_name: app.name,
           billing_period: subscription.billing_period,
         },
-      });
+      }, origin);
 
       const payment = await this.paymentRepository.findOne({ where: { id: paymentResult.payment.id } });
       if (payment) {

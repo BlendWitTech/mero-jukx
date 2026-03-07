@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CrmActivity } from '@src/database/entities/crm_activities.entity';
+import { CrmLead } from '@src/database/entities/crm_leads.entity';
 import { CreateActivityDto, UpdateActivityDto } from '../dto/activities.dto';
 
 @Injectable()
@@ -9,6 +10,8 @@ export class ActivitiesService {
     constructor(
         @InjectRepository(CrmActivity)
         private activitiesRepository: Repository<CrmActivity>,
+        @InjectRepository(CrmLead)
+        private leadsRepository: Repository<CrmLead>,
     ) { }
 
     async create(createActivityDto: CreateActivityDto, organizationId: string): Promise<CrmActivity> {
@@ -19,7 +22,19 @@ export class ActivitiesService {
             leadId: createActivityDto.lead_id,
             dealId: createActivityDto.deal_id,
         });
-        return this.activitiesRepository.save(activity);
+        const savedActivity = await this.activitiesRepository.save(activity);
+
+        if (createActivityDto.lead_id) {
+            const lead = await this.leadsRepository.findOne({
+                where: { id: createActivityDto.lead_id, organizationId }
+            });
+            if (lead) {
+                lead.score = (lead.score || 0) + 5;
+                await this.leadsRepository.save(lead);
+            }
+        }
+
+        return savedActivity;
     }
 
     async findAll(organizationId: string, leadId?: string, dealId?: string): Promise<CrmActivity[]> {

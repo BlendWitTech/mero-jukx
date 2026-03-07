@@ -103,4 +103,27 @@ export class InvoicesController {
     ) {
         await this.invoicesService.remove(id, organizationId);
     }
+
+    @Post(':id/send-email')
+    @Permissions('crm.invoices.view')
+    @ApiOperation({ summary: 'Send invoice via email' })
+    @ApiResponse({ status: 200, description: 'Email sent successfully' })
+    async sendEmail(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+        @Body() data: { to?: string; subject?: string; message?: string },
+    ) {
+        return this.invoicesService.sendEmail(id, organizationId, data.to, data.subject, data.message);
+    }
+
+    @Post(':id/send-whatsapp')
+    @Permissions('crm.invoices.view')
+    @ApiOperation({ summary: 'Send invoice summary via WhatsApp to client' })
+    @ApiResponse({ status: 200, description: 'WhatsApp message sent' })
+    async sendWhatsApp(
+        @Param('id') id: string,
+        @CurrentUser('organizationId') organizationId: string,
+    ) {
+        return this.invoicesService.sendWhatsApp(id, organizationId);
+    }
 }

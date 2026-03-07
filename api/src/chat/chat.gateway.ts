@@ -17,36 +17,30 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { OrganizationMember, OrganizationMemberStatus } from '../database/entities/organization_members.entity';
 
+import { ConfigService } from '@nestjs/config';
+import { getAllowedOrigins } from '../common/utils/cors.utils';
+
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   organizationId?: string;
   user?: User;
 }
 
-// Helper function to get allowed origins for WebSocket
-const getAllowedOrigins = (): (string | RegExp)[] => {
-  const nodeEnv = process.env.NODE_ENV || 'development';
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3001';
-  
-  if (nodeEnv === 'development') {
-    return [
-      'http://localhost:3001',
-      'http://127.0.0.1:3001',
-      'http://dev.merojugx.com:3001',
-      /^http:\/\/.*\.dev\.merojugx\.com:3001$/, // Allow all subdomains
-      /^http:\/\/(\d+\.){3}\d+:3001$/, // Allow IP addresses
-    ];
-  }
-  return [frontendUrl];
-};
-
 @WebSocketGateway({
   cors: {
-    origin: getAllowedOrigins(),
+    origin: (origin, callback) => {
+      const configService = new ConfigService();
+      const allowed = getAllowedOrigins(configService);
+      const isAllowed = !origin || allowed.some(a => {
+        if (typeof a === 'string') return a === origin;
+        if (a instanceof RegExp) return a.test(origin);
+        return false;
+      });
+      callback(isAllowed ? null : new Error('Not allowed by CORS'), isAllowed);
+    },
     credentials: true,
   },
   namespace: '/chat',
-  path: '/socket.io',
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -62,7 +56,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private readonly userRepository: Repository<User>,
     @InjectRepository(OrganizationMember)
     private readonly memberRepository: Repository<OrganizationMember>,
-  ) {}
+  ) { }
 
   async handleConnection(client: AuthenticatedSocket) {
     try {
@@ -142,7 +136,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       this.logger.log(`Client ${client.id} connected: User ${user.id} in organization ${organizationId}`);
-      
+
       // Notify others in the organization that user is online
       client.to(`org:${organizationId}`).emit('user:online', {
         user_id: user.id,
@@ -162,7 +156,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         userSockets.delete(client.id);
         if (userSockets.size === 0) {
           this.connectedUsers.delete(client.userId);
-          
+
           // Notify others that user is offline
           if (client.organizationId) {
             client.to(`org:${client.organizationId}`).emit('user:offline', {
@@ -275,7 +269,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const { chat_id, is_typing } = data;
-      
+
       // Emit typing status to all other members of the chat
       client.to(`chat:${chat_id}`).emit('message:typing', {
         chat_id,
@@ -304,7 +298,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       const { chat_id } = data;
-      
+
       // Verify user has access to this chat
       const hasAccess = await this.chatService.hasChatAccess(client.organizationId);
       if (!hasAccess) {
@@ -314,9 +308,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Join the chat room
       client.join(`chat:${chat_id}`);
-      
+
       this.logger.log(`User ${client.userId} joined chat ${chat_id}`);
-      
+
       return { success: true, chat_id };
     } catch (error) {
       this.logger.error('Error joining chat:', error);
@@ -346,17 +340,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
       return authHeader.substring(7);
     }
-    
+
     // Try auth object
     if (client.handshake.auth?.token) {
       return client.handshake.auth.token as string;
     }
-    
+
     // Try query parameter
     if (client.handshake.query?.token) {
       return client.handshake.query.token as string;
     }
-    
+
     return null;
   }
 
@@ -417,7 +411,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Get other user's name
       const otherUser = await this.userRepository.findOne({ where: { id: otherUserId } });
-      const otherUserName = otherUser 
+      const otherUserName = otherUser
         ? `${otherUser.first_name || ''} ${otherUser.last_name || ''}`.trim() || otherUser.email
         : 'User';
 
@@ -425,7 +419,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`user:${otherUserId}`).emit('call:incoming', {
         chatId,
         otherUserId: client.userId,
-        otherUserName: client.user 
+        otherUserName: client.user
           ? `${client.user.first_name || ''} ${client.user.last_name || ''}`.trim() || client.user.email
           : 'User',
         callType,

@@ -37,9 +37,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       primary: 'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500',
       secondary: 'bg-gray-600 text-white hover:bg-gray-700 focus-visible:ring-gray-500',
       danger: 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500',
-      ghost: 'bg-transparent hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100',
+      ghost: 'bg-transparent hover-surface text-gray-900 dark:text-gray-100',
       outline:
-        'border border-gray-300 dark:border-gray-700 bg-transparent hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100',
+        'border border-gray-300 dark:border-gray-700 bg-transparent hover-surface text-gray-900 dark:text-gray-100',
       link: 'bg-transparent hover:underline text-blue-600 hover:text-blue-700 p-0 h-auto',
     };
 

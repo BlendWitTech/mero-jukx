@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppsController, MarketplaceController } from './apps.controller';
 import { OrganizationAppsController } from './organization-apps.controller';
@@ -39,14 +39,14 @@ import { InvoicesModule } from '../invoices/invoices.module';
       NotificationPreference,
     ]),
     AuditLogsModule,
-    PaymentsModule,
+    forwardRef(() => PaymentsModule),
     NotificationsModule,
     CommonModule,
-    InvoicesModule,
+    forwardRef(() => InvoicesModule),
   ],
   controllers: [AppsController, MarketplaceController, OrganizationAppsController, AppInvitationController],
   providers: [AppsService, OrganizationAppsService, AppSubscriptionSchedulerService, AppAccessService, AppInvitationService],
   exports: [AppsService, OrganizationAppsService, AppAccessService, AppInvitationService],
 })
-export class AppsModule {}
+export class AppsModule { }
 

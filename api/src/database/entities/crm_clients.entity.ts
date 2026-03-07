@@ -11,6 +11,7 @@ import {
 import { Organization } from './organizations.entity';
 import { User } from './users.entity';
 import { CrmInvoice } from './crm_invoices.entity';
+import { CrmContact } from './crm_contacts.entity';
 
 @Entity('crm_clients')
 export class CrmClient {
@@ -53,6 +54,19 @@ export class CrmClient {
     @Column({ nullable: true })
     email: string;
 
+    @Column({
+        type: 'enum',
+        enum: ['LEAD', 'CUSTOMER', 'VENDOR', 'PARTNER'],
+        default: 'CUSTOMER',
+    })
+    category: string;
+
+    @Column({ type: 'jsonb', nullable: true })
+    tags: string[];
+
+    @Column({ type: 'jsonb', nullable: true })
+    custom_fields: Record<string, any>;
+
     @Column({ name: 'organization_id' })
     organizationId: string;
 
@@ -76,6 +90,9 @@ export class CrmClient {
 
     @OneToMany(() => CrmInvoice, (invoice) => invoice.client)
     invoices: CrmInvoice[];
+
+    @OneToMany(() => CrmContact, (contact) => contact.client)
+    contacts: CrmContact[];
 
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;

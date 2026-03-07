@@ -10,7 +10,7 @@ import { Repository, DataSource } from 'typeorm';
 import { Role } from '../database/entities/roles.entity';
 import { Permission } from '../database/entities/permissions.entity';
 import { RolePermission } from '../database/entities/role_permissions.entity';
-import { Organization } from '../database/entities/organizations.entity';
+import { Organization, OrganizationType } from '../database/entities/organizations.entity';
 import {
   OrganizationMember,
   OrganizationMemberStatus,
@@ -148,8 +148,13 @@ export class RolesService {
 
     // For freemium package, only return default roles (organization-owner, admin)
     if (organization.package.slug === 'freemium') {
-      return defaultRoles;
+      return defaultRoles.filter(role => role.slug !== 'branch-super-admin');
     }
+
+    // Filter out branch-specific roles for MAIN organizations
+    const filteredDefaultRoles = organization.org_type === OrganizationType.MAIN
+      ? defaultRoles.filter(role => role.slug !== 'branch-super-admin')
+      : defaultRoles;
 
     // For other packages, return default roles + organization-specific roles
     const orgRoles = await this.roleRepository.find({
@@ -164,7 +169,7 @@ export class RolesService {
     });
 
     // Combine and return both organization roles and default roles
-    return [...defaultRoles, ...orgRoles];
+    return [...filteredDefaultRoles, ...orgRoles];
   }
 
   async getRolesByApp(userId: string, organizationId: string, appId: number): Promise<Role[]> {
@@ -780,13 +785,18 @@ export class RolesService {
 
     const allRoles = [...defaultRoles, ...orgRoles];
 
+    // Filter out branch-specific roles for MAIN organizations
+    const filteredRoles = organization.org_type === OrganizationType.MAIN
+      ? allRoles.filter(role => role.slug !== 'branch-super-admin')
+      : allRoles;
+
     // Get requesting user's hierarchy level
     const requestingRoleLevel = this.getRoleHierarchyLevel(membership.role);
 
     // Filter roles based on hierarchy:
     // - Organization owners can assign any role (except other owners)
     // - Other users can only assign roles with hierarchy level > their own
-    const assignableRoles = allRoles.filter((role) => {
+    const assignableRoles = filteredRoles.filter((role) => {
       // Cannot assign organization owner role
       if (role.is_organization_owner) {
         return false;

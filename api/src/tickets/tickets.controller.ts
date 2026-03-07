@@ -16,7 +16,7 @@ import { TransferTicketToBoardDto } from './dto/transfer-ticket-to-board.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('tickets')
 export class TicketsController {
-  constructor(private readonly ticketsService: TicketsService) {}
+  constructor(private readonly ticketsService: TicketsService) { }
 
   @Post()
   @ApiOperation({ summary: 'Create a ticket (regular form)' })
@@ -51,9 +51,10 @@ export class TicketsController {
   findAll(
     @CurrentUser('id') userId: string,
     @CurrentOrganization('id') organizationId: string,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
     @Query() query: TicketQueryDto,
   ) {
-    return this.ticketsService.findAll(userId, organizationId, query);
+    return this.ticketsService.findAll(userId, organizationId, query, accessibleIds);
   }
 
   @Get(':id')
@@ -61,9 +62,10 @@ export class TicketsController {
   findOne(
     @CurrentUser('id') userId: string,
     @CurrentOrganization('id') organizationId: string,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
     @Param('id') ticketId: string,
   ) {
-    return this.ticketsService.findOne(userId, organizationId, ticketId);
+    return this.ticketsService.findOne(userId, organizationId, ticketId, accessibleIds);
   }
 
   @Patch(':id')
@@ -71,10 +73,11 @@ export class TicketsController {
   updateTicket(
     @CurrentUser('id') userId: string,
     @CurrentOrganization('id') organizationId: string,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
     @Param('id') ticketId: string,
     @Body() dto: UpdateTicketDto,
   ) {
-    return this.ticketsService.updateTicket(userId, organizationId, ticketId, dto);
+    return this.ticketsService.updateTicket(userId, organizationId, ticketId, dto, accessibleIds);
   }
 
   @Post(':id/comments')
@@ -82,10 +85,11 @@ export class TicketsController {
   addComment(
     @CurrentUser('id') userId: string,
     @CurrentOrganization('id') organizationId: string,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
     @Param('id') ticketId: string,
     @Body() dto: AddCommentDto,
   ) {
-    return this.ticketsService.addComment(userId, organizationId, ticketId, dto);
+    return this.ticketsService.addComment(userId, organizationId, ticketId, dto, accessibleIds);
   }
 
   @Post(':id/transfer-to-board')
@@ -94,10 +98,11 @@ export class TicketsController {
   transferToBoard(
     @CurrentUser('id') userId: string,
     @CurrentOrganization('id') organizationId: string,
+    @CurrentOrganization('accessibleIds') accessibleIds: string[],
     @Param('id') ticketId: string,
     @Body() dto: TransferTicketToBoardDto,
   ) {
-    return this.ticketsService.transferToBoard(userId, organizationId, ticketId, dto);
+    return this.ticketsService.transferToBoard(userId, organizationId, ticketId, dto, accessibleIds);
   }
 }
 

@@ -10,6 +10,7 @@ export const NEPAL_CHART_OF_ACCOUNTS = [
     { code: '1120', name: 'Bank Accounts', nameNepali: 'बैंक खाता', type: 'ASSET', category: 'Current Asset', parent: '1100', isSystem: true },
     { code: '1130', name: 'Accounts Receivable', nameNepali: 'पाउनु पर्ने रकम', type: 'ASSET', category: 'Current Asset', parent: '1100', isSystem: true },
     { code: '1140', name: 'Inventory', nameNepali: 'स्टक', type: 'ASSET', category: 'Current Asset', parent: '1100', isSystem: true },
+    { code: '1150', name: 'TDS Receivable', nameNepali: 'पाउनु पर्ने टि.डि.एस.', type: 'ASSET', category: 'Current Asset', parent: '1100', isSystem: true },
 
     // Fixed Assets
     { code: '1200', name: 'Fixed Assets', nameNepali: 'स्थिर सम्पत्ति', type: 'ASSET', category: 'Fixed Asset', parent: '1000', isSystem: true },

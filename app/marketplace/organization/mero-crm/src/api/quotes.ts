@@ -100,4 +100,8 @@ export const quotesApi = {
         const response = await apiClient.post(`/crm/quotes/${id}/convert-to-invoice`);
         return response.data;
     },
+
+    sendEmail: async (id: string, data: { to?: string; subject?: string; message?: string }): Promise<void> => {
+        await apiClient.post(`/crm/quotes/${id}/send-email`, data);
+    },
 };

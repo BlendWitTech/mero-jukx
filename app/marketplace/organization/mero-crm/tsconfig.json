@@ -29,10 +29,14 @@
                 "./src/*"
             ],
             "@shared/*": [
-                "../../../shared/frontend/*"
+                "../../../../shared/frontend/*"
+            ],
+            "@shared": [
+                "../../../../shared/frontend/index.ts",
+                "../../../../shared/frontend"
             ],
             "@frontend/*": [
-                "../../../frontend/src/*"
+                "../../../../app/src/*"
             ]
         }
     },

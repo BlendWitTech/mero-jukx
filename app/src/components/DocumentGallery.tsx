@@ -4,7 +4,7 @@ import api from '../services/api';
 import toast from '@shared/hooks/useToast';
 import { File, Download, Trash2, Filter, X } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
-import { DocumentType } from './DocumentUpload';
+import { DocumentType } from '../types/documents';
 import { useTheme } from '../contexts/ThemeContext';
 import { usePermissions } from '../hooks/usePermissions';
 

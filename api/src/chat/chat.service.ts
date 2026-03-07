@@ -82,7 +82,7 @@ export class ChatService {
     }
 
     // Check if package is Platinum or Diamond (includes chat)
-    if (organization.package.slug === 'platinum' || organization.package.slug === 'diamond') {
+    if (organization.package.slug === 'platinum' || organization.package.slug === 'diamond' || process.env.NODE_ENV === 'development') {
       return true;
     }
 

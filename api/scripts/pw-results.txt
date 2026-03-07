@@ -1,0 +1,4 @@
+﻿Current Hash in DB: $2b$10$fxkwUemrRWdu/RRXTnQr0O7DNB4n/Yig94g.Eh69yroroNtkppuK2
+Comparing with "Admin@123": NO MATCH
+Comparing with "admin@123": NO MATCH
+Comparing with "password123": NO MATCH

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, ChevronRight, ChevronLeft, Check } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
+import { Progress } from '@shared';
 
 interface OnboardingStep {
   id: string;
@@ -49,12 +50,13 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
       <div className="relative w-full max-w-2xl mx-4 bg-[#2f3136] rounded-lg shadow-2xl overflow-hidden">
         {/* Progress bar */}
-        <div className="h-1 bg-[#202225]">
-          <div
-            className="h-full bg-[#5865f2] transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        <Progress
+          value={progress}
+          max={100}
+          smartColor
+          size="sm"
+          className="rounded-none h-1"
+        />
 
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-[#202225]">
@@ -114,13 +116,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
             {steps.map((_, index) => (
               <div
                 key={index}
-                className={`h-2 w-2 rounded-full transition-colors ${
-                  index === currentStep
-                    ? 'bg-[#5865f2]'
-                    : index < currentStep
-                      ? 'bg-[#23a55a]'
-                      : 'bg-[#393c43]'
-                }`}
+                className={`h-2 w-2 rounded-full transition-colors ${index === currentStep
+                  ? 'bg-[#5865f2]'
+                  : index < currentStep
+                    ? 'bg-[#23a55a]'
+                    : 'bg-[#393c43]'
+                  }`}
               />
             ))}
           </div>

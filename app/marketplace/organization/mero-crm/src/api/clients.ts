@@ -1,5 +1,16 @@
 import apiClient from '@frontend/services/api';
 
+export interface ClientContact {
+    id?: string;
+    first_name: string;
+    last_name?: string;
+    email?: string;
+    phone?: string;
+    job_title?: string;
+    is_primary?: boolean;
+    clientId?: string;
+}
+
 export interface Client {
     id: string;
     name: string;
@@ -12,7 +23,12 @@ export interface Client {
     country?: string;
     zipCode?: string;
     notes?: string;
+    leadId?: string;
     assignedToId?: string;
+    category?: 'LEAD' | 'CUSTOMER' | 'VENDOR' | 'PARTNER';
+    tags?: string[];
+    custom_fields?: Record<string, any>;
+    contacts?: ClientContact[];
     organizationId: string;
     createdById: string;
     createdAt: string;
@@ -44,6 +60,10 @@ export interface CreateClientDto {
     zipCode?: string;
     notes?: string;
     assignedToId?: string;
+    category?: 'LEAD' | 'CUSTOMER' | 'VENDOR' | 'PARTNER';
+    tags?: string[];
+    customFields?: Record<string, any>;
+    contacts?: ClientContact[];
 }
 
 export interface UpdateClientDto extends Partial<CreateClientDto> { }
@@ -75,6 +95,11 @@ export const clientsApi = {
 
     createClient: async (data: CreateClientDto): Promise<Client> => {
         const response = await apiClient.post('/crm/clients', data);
+        return response.data;
+    },
+
+    bulkCreateClient: async (data: CreateClientDto[]): Promise<Client[]> => {
+        const response = await apiClient.post('/crm/clients/bulk', data);
         return response.data;
     },
 

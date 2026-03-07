@@ -18,6 +18,11 @@ import { Invitation } from '../database/entities/invitations.entity';
 import { Notification } from '../database/entities/notifications.entity';
 import { CommonModule } from '../common/common.module';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
+import { Ticket } from '../database/entities/tickets.entity';
+import { Task } from '../database/entities/tasks.entity';
+import { Payment } from '../database/entities/payments.entity';
+import { AuditLog } from '../database/entities/audit_logs.entity';
+import { DataTransferService } from './services/data-transfer.service';
 
 @Module({
   imports: [
@@ -31,6 +36,10 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
       Role,
       Invitation,
       Notification,
+      Ticket,
+      Task,
+      Payment,
+      AuditLog,
     ]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -46,7 +55,7 @@ import { AuditLogsModule } from '../audit-logs/audit-logs.module';
     AuditLogsModule,
   ],
   controllers: [OrganizationsController, DocumentsController],
-  providers: [OrganizationsService, DocumentsService, OrganizationBrandingService],
-  exports: [OrganizationsService, DocumentsService, OrganizationBrandingService],
+  providers: [OrganizationsService, DocumentsService, OrganizationBrandingService, DataTransferService],
+  exports: [OrganizationsService, DocumentsService, OrganizationBrandingService, DataTransferService],
 })
 export class OrganizationsModule { }

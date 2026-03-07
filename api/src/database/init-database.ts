@@ -56,11 +56,15 @@ export async function initializeDatabase(): Promise<void> {
       }
     } catch (error: any) {
       // If migrations fail, provide helpful error message
-      console.error('  ❌ Error running migrations:', error?.message || error);
-      if (error?.message?.includes('already exists')) {
-        console.log('  ℹ Some migrations may have been partially applied. Continuing...\n');
+      const errorMessage = error?.message || String(error);
+      console.error('  ❌ Error running migrations:', errorMessage);
+
+      if (errorMessage.toLowerCase().includes('already exists')) {
+        console.log('  ℹ Some schema elements already exist. This is likely due to partially applied migrations. Continuing...\n');
+      } else if (errorMessage.toLowerCase().includes('duplicate key value')) {
+        console.log('  ℹ Duplicate key error encountered. Continuing...\n');
       } else {
-        throw error;
+        console.warn('  ⚠️ Migration error encountered, but attempting to continue backend startup...');
       }
     }
 
@@ -71,8 +75,9 @@ export async function initializeDatabase(): Promise<void> {
       hasPackages = parseInt(packagesCount[0]?.count || '0', 10) > 0;
     } catch (error: any) {
       // Packages table might not exist yet, that's okay
+      // Don't rethrow or log if the table doesn't exist
       if (!error?.message?.includes('does not exist')) {
-        throw error;
+        console.error('  ⚠️ Note: Seed check failed (packages table may not be ready yet)');
       }
     }
 

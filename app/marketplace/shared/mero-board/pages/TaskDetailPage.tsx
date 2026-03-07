@@ -34,13 +34,20 @@ import {
   Link2,
   Timer,
   TrendingUp,
+  LayoutTemplate,
+  Eye,
+  EyeOff,
+  Bell,
 } from 'lucide-react';
+import CardTemplateModal, { CardTemplate } from '../components/CardTemplateModal';
 import { useAppContext } from '../contexts/AppContext';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import { useAuthStore } from '@frontend/store/authStore';
 import toast from '@shared/frontend/hooks/useToast';
 import TaskAttachmentUpload from '../components/TaskAttachmentUpload';
+import TaskChecklist from '../components/TaskChecklist';
 import { formatDistanceToNow } from 'date-fns';
+import { ListTodo, ChevronRight } from 'lucide-react';
 
 // Task enums - matching backend
 export enum TaskStatus {
@@ -80,6 +87,13 @@ interface Task {
     last_name: string;
     email: string;
   };
+  checklist_items?: {
+    id: string;
+    content: string;
+    is_completed: boolean;
+    sort_order: number;
+  }[];
+  sub_tasks?: Task[];
 }
 
 interface TaskComment {
@@ -153,6 +167,10 @@ export default function TaskDetailPage() {
     is_billable: false,
   });
   const [showUpload, setShowUpload] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [showAddCustomField, setShowAddCustomField] = useState(false);
+  const [customFieldForm, setCustomFieldForm] = useState({ name: '', value: '' });
+  const [crmDealInput, setCrmDealInput] = useState('');
 
   // Fetch task
   const { data: task, isLoading: taskLoading, error: taskError } = useQuery<Task>({
@@ -314,6 +332,22 @@ export default function TaskDetailPage() {
     },
   });
 
+  // Link CRM deal mutation
+  const linkCrmDealMutation = useMutation({
+    mutationFn: async (crmDealId: string | null) => {
+      const response = await api.put(`/apps/${appSlug}/projects/${projectId}/tasks/${taskId}/crm-deal`, { crm_deal_id: crmDealId });
+      return response.data;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['task', appSlug, projectId, taskId] });
+      setCrmDealInput('');
+      toast.success(variables === null ? 'CRM deal unlinked' : 'CRM deal linked');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Failed to update CRM deal link');
+    },
+  });
+
   // Delete attachment mutation
   const deleteAttachmentMutation = useMutation({
     mutationFn: async (attachmentId: string) => {
@@ -392,6 +426,53 @@ export default function TaskDetailPage() {
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Failed to delete time log');
     },
+  });
+
+  const createSubTaskMutation = useMutation({
+    mutationFn: async (title: string) => {
+      const response = await api.post(`/apps/${appSlug}/projects/${projectId}/tasks`, {
+        title,
+        parent_task_id: taskId,
+      });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task', appSlug, projectId, taskId] });
+      toast.success('Sub-task created');
+    },
+  });
+
+  // Watchers
+  const { data: watchersData = [] } = useQuery<{ id: string; user: { id: string; first_name: string; last_name: string } }[]>({
+    queryKey: ['task-watchers', appSlug, projectId, taskId],
+    queryFn: async () => {
+      const response = await api.get(`/apps/${appSlug}/projects/${projectId}/tasks/${taskId}/watchers`);
+      return response.data;
+    },
+    enabled: !!taskId && !!projectId,
+  });
+  const isWatching = watchersData.some((w) => w.user?.id === user?.id);
+
+  const watchMutation = useMutation({
+    mutationFn: async () => {
+      await api.post(`/apps/${appSlug}/projects/${projectId}/tasks/${taskId}/watchers`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-watchers', appSlug, projectId, taskId] });
+      toast.success('Now watching this card');
+    },
+    onError: () => toast.error('Failed to watch card'),
+  });
+
+  const unwatchMutation = useMutation({
+    mutationFn: async () => {
+      await api.delete(`/apps/${appSlug}/projects/${projectId}/tasks/${taskId}/watchers`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['task-watchers', appSlug, projectId, taskId] });
+      toast.success('Stopped watching this card');
+    },
+    onError: () => toast.error('Failed to unwatch card'),
   });
 
   const handleAddComment = () => {
@@ -546,6 +627,14 @@ export default function TaskDetailPage() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Tasks
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => setShowTemplateModal(true)}
+            style={{ borderColor: theme.colors.border, color: theme.colors.text }}
+          >
+            <LayoutTemplate className="mr-2 h-4 w-4" />
+            Apply Template
+          </Button>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -601,6 +690,63 @@ export default function TaskDetailPage() {
                   </div>
                 )}
 
+                {/* Checklist */}
+                <div className="pt-4 border-t" style={{ borderColor: `${theme.colors.border}40` }}>
+                  <TaskChecklist
+                    taskId={taskId!}
+                    items={(task.checklist_items || []) as any[]}
+                    theme={theme}
+                  />
+                </div>
+
+                {/* Sub-tasks */}
+                <div className="pt-4 border-t" style={{ borderColor: `${theme.colors.border}40` }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold text-lg" style={{ color: theme.colors.text }}>Sub-tasks</h3>
+                    <Badge variant="default">{task.sub_tasks?.length || 0}</Badge>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    {task.sub_tasks?.map(sub => (
+                      <div
+                        key={sub.id}
+                        className="flex items-center gap-3 p-3 rounded-lg hover:bg-black/5 dark:hover:bg-white/5 cursor-pointer transition-colors"
+                        style={{ backgroundColor: theme.colors.background }}
+                        onClick={() => navigate(`../${sub.id}`, { relative: 'route' })}
+                      >
+                        <ChevronRight className="h-4 w-4 opacity-40" />
+                        <span className="flex-1 text-sm font-medium" style={{ color: theme.colors.text }}>{sub.title}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={getStatusColor(sub.status)} size="sm">{sub.status}</Badge>
+                          {sub.assignee && (
+                            <Avatar
+                              size="sm"
+                              name={`${sub.assignee.first_name} ${sub.assignee.last_name}`}
+                              src={sub.assignee.avatar_url || undefined}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Add sub-task..."
+                      className="flex-1"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const val = e.currentTarget.value;
+                          if (val) {
+                            createSubTaskMutation.mutate(val);
+                            e.currentTarget.value = '';
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
                 {/* Task Info */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -652,6 +798,104 @@ export default function TaskDetailPage() {
                     </div>
                   </div>
                 )}
+
+                {/* CRM Deal Link */}
+                <div className="pt-4 border-t" style={{ borderColor: `${theme.colors.border}40` }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Link2 className="h-4 w-4" style={{ color: theme.colors.primary }} />
+                    <h3 className="font-semibold" style={{ color: theme.colors.text }}>CRM Deal</h3>
+                  </div>
+                  {(task as any).crm_deal_id ? (
+                    <div className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.background }}>
+                      <span className="text-sm font-mono flex-1 truncate" style={{ color: theme.colors.text }}>
+                        {(task as any).crm_deal_id}
+                      </span>
+                      <button
+                        onClick={() => linkCrmDealMutation.mutate(null)}
+                        className="flex items-center gap-1 text-xs px-2 py-1 rounded transition-colors"
+                        style={{ color: '#ef4444', backgroundColor: '#fee2e2' }}
+                        title="Unlink deal"
+                      >
+                        <X className="h-3 w-3" /> Unlink
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Enter CRM Deal ID"
+                        value={crmDealInput}
+                        onChange={(e) => setCrmDealInput(e.target.value)}
+                        className="flex-1 text-sm"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (!crmDealInput.trim()) return;
+                          linkCrmDealMutation.mutate(crmDealInput.trim());
+                        }}
+                        disabled={!crmDealInput.trim() || linkCrmDealMutation.isPending}
+                        style={{ backgroundColor: theme.colors.primary, color: '#fff' }}
+                      >
+                        Link
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Custom Fields */}
+                <div className="pt-4 border-t" style={{ borderColor: `${theme.colors.border}40` }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold" style={{ color: theme.colors.text }}>Custom Fields</h3>
+                    <button
+                      onClick={() => setShowAddCustomField(!showAddCustomField)}
+                      className="flex items-center gap-1 text-sm px-2 py-1 rounded-lg transition-colors"
+                      style={{ color: theme.colors.primary, backgroundColor: `${theme.colors.primary}10` }}
+                    >
+                      <Plus className="h-3 w-3" /> Add Field
+                    </button>
+                  </div>
+
+                  {showAddCustomField && (
+                    <div className="flex gap-2 mb-3">
+                      <Input
+                        placeholder="Field name"
+                        value={customFieldForm.name}
+                        onChange={(e) => setCustomFieldForm({ ...customFieldForm, name: e.target.value })}
+                        className="flex-1"
+                      />
+                      <Input
+                        placeholder="Value"
+                        value={customFieldForm.value}
+                        onChange={(e) => setCustomFieldForm({ ...customFieldForm, value: e.target.value })}
+                        className="flex-1"
+                      />
+                      <Button
+                        onClick={() => {
+                          if (!customFieldForm.name.trim()) return;
+                          const existing = (task as any).custom_fields || [];
+                          updateTaskMutation.mutate({ custom_fields: [...existing, customFieldForm] });
+                          setCustomFieldForm({ name: '', value: '' });
+                          setShowAddCustomField(false);
+                        }}
+                        style={{ backgroundColor: theme.colors.primary, color: '#fff' }}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  )}
+
+                  {(task as any).custom_fields && (task as any).custom_fields.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {(task as any).custom_fields.map((field: { name: string; value: string }, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 p-2 rounded-lg" style={{ backgroundColor: theme.colors.background }}>
+                          <span className="text-xs font-semibold" style={{ color: theme.colors.textSecondary }}>{field.name}:</span>
+                          <span className="text-xs" style={{ color: theme.colors.text }}>{field.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm" style={{ color: theme.colors.textSecondary }}>No custom fields yet. Click "Add Field" to add one.</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
 
@@ -669,7 +913,7 @@ export default function TaskDetailPage() {
                   <Textarea
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
-                    placeholder="Add a comment..."
+                    placeholder="Add a comment... Use @name to mention team members"
                     rows={3}
                     style={{
                       backgroundColor: theme.colors.background,
@@ -864,6 +1108,47 @@ export default function TaskDetailPage() {
                             </div>
                           </div>
                         ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Card Watchers */}
+            <Card style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border }}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2" style={{ color: theme.colors.text }}>
+                    <Bell className="h-5 w-5" />
+                    Watchers ({watchersData.length})
+                  </CardTitle>
+                  <button
+                    onClick={() => isWatching ? unwatchMutation.mutate() : watchMutation.mutate()}
+                    disabled={watchMutation.isPending || unwatchMutation.isPending}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                    style={{
+                      backgroundColor: isWatching ? `${theme.colors.primary}15` : theme.colors.background,
+                      color: isWatching ? theme.colors.primary : theme.colors.textSecondary,
+                      border: `1px solid ${isWatching ? theme.colors.primary : theme.colors.border}`,
+                    }}
+                  >
+                    {isWatching ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    {isWatching ? 'Unwatch' : 'Watch'}
+                  </button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {watchersData.length === 0 ? (
+                  <p className="text-sm" style={{ color: theme.colors.textSecondary }}>
+                    No watchers yet. Click Watch to get notified about updates.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {watchersData.map((w) => (
+                      <div key={w.id} className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: theme.colors.background, color: theme.colors.text, border: `1px solid ${theme.colors.border}` }}>
+                        <Avatar name={`${w.user.first_name} ${w.user.last_name}`} size="sm" />
+                        {w.user.first_name} {w.user.last_name}
                       </div>
                     ))}
                   </div>
@@ -1496,6 +1781,19 @@ export default function TaskDetailPage() {
           </div>
         </div>
       </Modal>
+
+      {/* Card Template Modal */}
+      <CardTemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onApply={(template: CardTemplate) => {
+          updateTaskMutation.mutate({
+            description: template.templateContent,
+          });
+          setShowTemplateModal(false);
+          toast.success(`"${template.name}" template applied`);
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { Link, useParams } from 'react-router-dom';
 import api from '../../services/api';
 import toast from '@shared/hooks/useToast';
-import { Search, Plus, Edit, Trash2, Eye, MoreVertical, X, Save, Shield, CheckCircle2, AlertCircle, UserCog, Users } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Eye, MoreVertical, X, Save, Shield, CheckCircle2, AlertCircle, UserCog, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -46,18 +46,18 @@ type RevokeAccessFormData = z.infer<typeof revokeAccessSchema>;
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const { slug } = useParams<{ slug: string }>();
-  const { user: currentUser, isAuthenticated, accessToken, _hasHydrated } = useAuthStore();
+  const { user: currentUser, organization, isAuthenticated, accessToken, _hasHydrated } = useAuthStore();
   const { isOrganizationOwner, hasPermission, userData } = usePermissions();
   const { theme } = useTheme();
-  
+
   // Check if user can view users list
   const canViewUsers = isOrganizationOwner || hasPermission('users.view');
-  
+
   const canImpersonate = isOrganizationOwner || hasPermission('users.impersonate');
   const canEditUsers = isOrganizationOwner || hasPermission('users.edit');
   const canRevokeUsers = isOrganizationOwner || hasPermission('users.revoke');
   const canAssignRoles = isOrganizationOwner || hasPermission('roles.assign');
-  
+
   // Get current user's actual role for hierarchy comparison
   const currentUserRole = userData?.role;
 
@@ -78,15 +78,15 @@ export default function UsersPage() {
     if (isCurrentUser(targetUser.id)) return false; // Can't edit self
     if (targetUser.role.is_organization_owner) return false; // Can't edit owner
     if (!canEditUsers) return false; // Must have users.edit permission
-    
+
     // Organization owners can edit anyone (except other owners)
     if (isOrganizationOwner) return true;
-    
+
     // For non-owners, check role hierarchy
     if (!currentUserRole) return false;
     const currentUserRoleLevel = getRoleHierarchyLevel(currentUserRole);
     const targetRoleLevel = getRoleHierarchyLevel(targetUser.role);
-    
+
     // Can only edit users with lower role levels (higher hierarchy_level number = lower authority)
     return currentUserRoleLevel < targetRoleLevel;
   };
@@ -97,18 +97,21 @@ export default function UsersPage() {
     if (isCurrentUser(targetUser.id)) return false; // Can't edit self
     if (targetUser.role.is_organization_owner) return false; // Can't edit owner
     if (!canAssignRoles) return false;
-    
+
     // Organization owners can edit anyone (except other owners)
     if (isOrganizationOwner) return true;
-    
+
     // For non-owners, check role hierarchy
     if (!currentUserRole) return false;
     const currentUserRoleLevel = getRoleHierarchyLevel(currentUserRole);
     const targetRoleLevel = getRoleHierarchyLevel(targetUser.role);
-    
+
     // Can only edit users with lower role levels
     return currentUserRoleLevel < targetRoleLevel;
   };
+
+  const isMasterOrg = organization?.org_type === 'MAIN';
+  const [activeTab, setActiveTab] = useState<'all' | 'master'>('all');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -119,12 +122,28 @@ export default function UsersPage() {
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
   const [menuPosition, setMenuPosition] = useState<{ top: number; right: number } | null>(null);
   const menuButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set());
+
+  const toggleUserExpansion = (userId: string) => {
+    const newExpanded = new Set(expandedUsers);
+    if (newExpanded.has(userId)) {
+      newExpanded.delete(userId);
+    } else {
+      newExpanded.add(userId);
+    }
+    setExpandedUsers(newExpanded);
+  };
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['users', page, search],
+    queryKey: ['users', page, search, activeTab],
     queryFn: async () => {
       const response = await api.get('/users', {
-        params: { page, limit: 20, search },
+        params: {
+          page,
+          limit: 20,
+          search,
+          scope: activeTab === 'master' ? 'master' : 'all'
+        },
       });
       return response.data;
     },
@@ -161,7 +180,7 @@ export default function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ['assignable-roles'] });
       refetchRoles();
     };
-    
+
     window.addEventListener('package-updated', handlePackageUpdate);
     return () => {
       window.removeEventListener('package-updated', handlePackageUpdate);
@@ -372,18 +391,45 @@ export default function UsersPage() {
 
       <Card className="mb-4" style={{ backgroundColor: theme.colors.surface, borderColor: theme.colors.border }}>
         <CardContent>
-          <SearchBar
-            placeholder="Search users..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            theme={theme}
-          />
+          <div className="space-y-4">
+            <SearchBar
+              placeholder="Search users..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              theme={theme}
+            />
+
+            {isMasterOrg && (
+              <div className="flex border-b" style={{ borderColor: theme.colors.border }}>
+                <button
+                  onClick={() => { setActiveTab('all'); setPage(1); }}
+                  className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === 'all' ? '' : 'hover:bg-opacity-5'}`}
+                  style={{
+                    color: activeTab === 'all' ? theme.colors.primary : theme.colors.textSecondary,
+                    borderBottom: activeTab === 'all' ? `2px solid ${theme.colors.primary}` : 'none'
+                  }}
+                >
+                  All Users
+                </button>
+                <button
+                  onClick={() => { setActiveTab('master'); setPage(1); }}
+                  className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === 'master' ? '' : 'hover:bg-opacity-5'}`}
+                  style={{
+                    color: activeTab === 'master' ? theme.colors.primary : theme.colors.textSecondary,
+                    borderBottom: activeTab === 'master' ? `2px solid ${theme.colors.primary}` : 'none'
+                  }}
+                >
+                  Master Organization
+                </button>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
 
       {error && (
-        <Card className="rounded-lg p-4" style={{ backgroundColor: '#ed4245' + '1A', border: `1px solid #ed4245` + '33' }}>
-          <p style={{ color: '#ed4245' }}>
+        <Card className="rounded-lg p-4" style={{ backgroundColor: theme.colors.error + '1A', border: `1px solid ${theme.colors.error}` + '33' }}>
+          <p style={{ color: theme.colors.error }}>
             Error loading users: {error instanceof Error ? error.message : 'Unknown error'}
           </p>
         </Card>
@@ -405,9 +451,6 @@ export default function UsersPage() {
                     User
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: theme.colors.textSecondary }}>
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: theme.colors.textSecondary }}>
                     Role
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider" style={{ color: theme.colors.textSecondary }}>
@@ -422,266 +465,298 @@ export default function UsersPage() {
                 {data?.users && data.users.length > 0 ? (
                   data.users.map((user: any) => {
                     const isSelf = isCurrentUser(user.id);
+                    const isExpanded = expandedUsers.has(user.id);
+
                     return (
-                    <tr 
-                      key={user.id} 
-                      className={isSelf ? 'opacity-60 cursor-not-allowed' : ''}
-                      style={{ borderTop: `1px solid ${theme.colors.border}` }}
-                      onMouseEnter={(e) => {
-                        if (!isSelf) e.currentTarget.style.backgroundColor = theme.colors.surface;
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isSelf) e.currentTarget.style.backgroundColor = 'transparent';
-                      }}
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="h-10 w-10 rounded-full flex items-center justify-center" style={{ backgroundColor: theme.colors.primary + '1A' }}>
-                            <span className="font-medium" style={{ color: theme.colors.primary }}>
-                              {user.first_name?.[0]?.toUpperCase() || ''}{user.last_name?.[0]?.toUpperCase() || ''}
-                            </span>
-                          </div>
-                          <div className="ml-4">
-                            <div className="text-sm font-medium" style={{ color: theme.colors.text }}>
-                              {user.first_name} {user.last_name}
-                              {isSelf && <span className="ml-2 text-xs" style={{ color: theme.colors.textSecondary }}>(You)</span>}
-                            </div>
-                            {user.phone && (
-                              <div className="text-sm" style={{ color: theme.colors.textSecondary }}>{user.phone}</div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm" style={{ color: theme.colors.textSecondary }}>
-                        {user.email}
-                        {user.email_verified ? (
-                          <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.colors.primary}33`, color: theme.colors.primary, border: `1px solid ${theme.colors.primary}4D` }}>✓ Verified</span>
-                        ) : (
-                          <span className="ml-2 text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: `${theme.colors.primary}1A`, color: theme.colors.textSecondary, border: `1px solid ${theme.colors.border}` }}>Unverified</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {user.role ? (
-                          <span 
-                            className="text-xs px-2 py-1 rounded-full font-medium"
-                            style={{
-                              backgroundColor: `${theme.colors.primary}33`,
-                              color: theme.colors.primary,
-                              border: `1px solid ${theme.colors.primary}4D`,
-                            }}
-                          >
-                            {user.role.name}
-                          </span>
-                        ) : (
-                          <span className="text-sm" style={{ color: theme.colors.textSecondary }}>No role</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className="text-xs px-2 py-1 rounded-full font-medium"
-                          style={{
-                            backgroundColor: 
-                              user.status === 'active'
-                                ? `${theme.colors.primary}33`
-                                : user.status === 'suspended'
-                                ? `${theme.colors.primary}1A`
-                                : `${theme.colors.primary}1A`,
-                            color: 
-                              user.status === 'active'
-                                ? theme.colors.primary
-                                : theme.colors.textSecondary,
-                            border: 
-                              user.status === 'active'
-                                ? `1px solid ${theme.colors.primary}4D`
-                                : `1px solid ${theme.colors.border}`,
+                      <React.Fragment key={user.id}>
+                        {/* Summary Row */}
+                        <tr
+                          className={`${isSelf ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} transition-colors duration-150`}
+                          style={{ borderTop: `1px solid ${theme.colors.border}` }}
+                          onClick={() => !isSelf && toggleUserExpansion(user.id)}
+                          onMouseEnter={(e) => {
+                            if (!isSelf) e.currentTarget.style.backgroundColor = theme.colors.surface;
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!isSelf) e.currentTarget.style.backgroundColor = 'transparent';
                           }}
                         >
-                          {user.status === 'active' ? 'Active' : user.status === 'suspended' ? 'Suspended' : 'Deleted'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <div className="relative inline-block">
-                          <button
-                            ref={(el) => {
-                              menuButtonRefs.current[user.id] = el;
-                            }}
-                            onClick={(e) => {
-                              if (isSelf) {
-                                e.stopPropagation();
-                                return;
-                              }
-                              e.stopPropagation();
-                              const button = menuButtonRefs.current[user.id];
-                              if (button) {
-                                const rect = button.getBoundingClientRect();
-                                setMenuPosition({
-                                  top: rect.bottom + 8,
-                                  right: window.innerWidth - rect.right,
-                                });
-                              }
-                              setActionMenuOpen(actionMenuOpen === user.id ? null : user.id);
-                            }}
-                            disabled={isSelf}
-                            className="p-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            style={{ color: theme.colors.textSecondary }}
-                            onMouseEnter={(e) => {
-                              if (!isSelf) {
-                                e.currentTarget.style.color = theme.colors.text;
-                                e.currentTarget.style.backgroundColor = theme.colors.surface;
-                              }
-                            }}
-                            onMouseLeave={(e) => {
-                              if (!isSelf) {
-                                e.currentTarget.style.color = theme.colors.textSecondary;
-                                e.currentTarget.style.backgroundColor = 'transparent';
-                              }
-                            }}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-                          {actionMenuOpen === user.id && menuPosition && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-[100]"
-                                onClick={() => {
-                                  setActionMenuOpen(null);
-                                  setMenuPosition(null);
-                                }}
-                              ></div>
-                              <div 
-                                className="fixed rounded-lg shadow-xl z-[101] py-1 min-w-[200px]"
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div className="h-10 w-10 rounded-full flex items-center justify-center transition-transform hover:scale-110" style={{ backgroundColor: theme.colors.primary + '1A' }}>
+                                <span className="font-medium" style={{ color: theme.colors.primary }}>
+                                  {user.first_name?.[0]?.toUpperCase() || ''}{user.last_name?.[0]?.toUpperCase() || ''}
+                                </span>
+                              </div>
+                              <div className="ml-4">
+                                <div className="text-sm font-semibold flex items-center gap-2" style={{ color: theme.colors.text }}>
+                                  {user.first_name} {user.last_name}
+                                  {isSelf && <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 font-normal" style={{ color: theme.colors.textSecondary }}>YOU</span>}
+                                </div>
+                                <div className="text-xs mt-0.5" style={{ color: theme.colors.textSecondary }}>{user.email}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {user.role ? (
+                              <span
+                                className="text-xs px-2.5 py-1 rounded-full font-medium"
                                 style={{
-                                  top: `${menuPosition.top}px`,
-                                  right: `${menuPosition.right}px`,
-                                  backgroundColor: theme.colors.surface,
-                                  border: `1px solid ${theme.colors.border}`
+                                  backgroundColor: `${theme.colors.primary}10`,
+                                  color: theme.colors.primary,
+                                  border: `1px solid ${theme.colors.primary}30`,
                                 }}
-                                onClick={(e) => e.stopPropagation()}
                               >
-                                <div className="py-1">
-                                  <button
-                                    onClick={() => {
-                                      handleView(user);
-                                      setActionMenuOpen(null);
-                                      setMenuPosition(null);
-                                    }}
-                                    className="w-full text-left px-4 py-2 text-sm flex items-center transition-colors"
-                                    style={{ color: theme.colors.textSecondary }}
-                                    onMouseEnter={(e) => {
-                                      e.currentTarget.style.backgroundColor = theme.colors.border;
-                                      e.currentTarget.style.color = theme.colors.text;
-                                    }}
-                                    onMouseLeave={(e) => {
-                                      e.currentTarget.style.backgroundColor = 'transparent';
-                                      e.currentTarget.style.color = theme.colors.textSecondary;
-                                    }}
-                                  >
-                                    <Eye className="h-4 w-4 mr-2" />
-                                    View Details
-                                  </button>
-                                  {canEditUsers && canEditSpecificUser(user) && (
-                                    <button
+                                {user.role.name}
+                              </span>
+                            ) : (
+                              <span className="text-xs" style={{ color: theme.colors.textSecondary }}>No role</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className="text-xs px-2.5 py-1 rounded-full font-medium"
+                              style={{
+                                backgroundColor:
+                                  user.status === 'active'
+                                    ? `${theme.colors.primary}20`
+                                    : `${theme.colors.textSecondary}15`,
+                                color:
+                                  user.status === 'active'
+                                    ? theme.colors.primary
+                                    : theme.colors.textSecondary,
+                                border: `1px solid ${user.status === 'active' ? theme.colors.primary + '30' : theme.colors.border}`,
+                              }}
+                            >
+                              {user.status === 'active' ? 'Active' : user.status === 'suspended' ? 'Suspended' : 'Deleted'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <div className="flex items-center justify-end gap-2">
+                              {!isSelf && (
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleUserExpansion(user.id);
+                                  }}
+                                  className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                                </button>
+                              )}
+                              <div className="relative inline-block">
+                                <button
+                                  ref={(el) => {
+                                    menuButtonRefs.current[user.id] = el;
+                                  }}
+                                  onClick={(e) => {
+                                    if (isSelf) {
+                                      e.stopPropagation();
+                                      return;
+                                    }
+                                    e.stopPropagation();
+                                    const button = menuButtonRefs.current[user.id];
+                                    if (button) {
+                                      const rect = button.getBoundingClientRect();
+                                      setMenuPosition({
+                                        top: rect.bottom + 8,
+                                        right: window.innerWidth - rect.right,
+                                      });
+                                    }
+                                    setActionMenuOpen(actionMenuOpen === user.id ? null : user.id);
+                                  }}
+                                  disabled={isSelf}
+                                  className="p-1.5 rounded-lg transition-colors hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                                  style={{ color: theme.colors.textSecondary }}
+                                >
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                                {actionMenuOpen === user.id && menuPosition && (
+                                  <>
+                                    <div
+                                      className="fixed inset-0 z-[100]"
                                       onClick={() => {
-                                        handleEdit(user);
                                         setActionMenuOpen(null);
                                         setMenuPosition(null);
                                       }}
-                                      className="w-full text-left px-4 py-2 text-sm flex items-center transition-colors"
-                                      style={{ color: theme.colors.textSecondary }}
-                                      onMouseEnter={(e) => {
-                                        e.currentTarget.style.backgroundColor = theme.colors.background;
-                                        e.currentTarget.style.color = theme.colors.text;
+                                    ></div>
+                                    <div
+                                      className="fixed rounded-lg shadow-xl z-[101] py-1 min-w-[200px] animate-in fade-in zoom-in duration-100"
+                                      style={{
+                                        top: `${menuPosition.top}px`,
+                                        right: `${menuPosition.right}px`,
+                                        backgroundColor: theme.colors.surface,
+                                        border: `1px solid ${theme.colors.border}`,
+                                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)'
                                       }}
-                                      onMouseLeave={(e) => {
-                                        e.currentTarget.style.backgroundColor = 'transparent';
-                                        e.currentTarget.style.color = theme.colors.textSecondary;
-                                      }}
+                                      onClick={(e) => e.stopPropagation()}
                                     >
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      Edit User
-                                    </button>
-                                  )}
-                                  {canAssignRoles && (
-                                    <button
-                                      onClick={() => {
-                                        handleAssignRole(user);
-                                        setActionMenuOpen(null);
-                                        setMenuPosition(null);
-                                      }}
-                                      disabled={!canEditUserRole(user)}
-                                      className="w-full text-left px-4 py-2 text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                      style={{ color: theme.colors.textSecondary }}
-                                      onMouseEnter={(e) => {
-                                        if (canEditUserRole(user)) {
-                                          e.currentTarget.style.backgroundColor = theme.colors.background;
-                                          e.currentTarget.style.color = theme.colors.text;
-                                        }
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        if (canEditUserRole(user)) {
-                                          e.currentTarget.style.backgroundColor = 'transparent';
-                                          e.currentTarget.style.color = theme.colors.textSecondary;
-                                        }
-                                      }}
-                                    >
-                                      <Shield className="h-4 w-4 mr-2" />
-                                      Change Role
-                                    </button>
-                                  )}
-                                  {canImpersonate && (
-                                    <button
-                                      onClick={() => {
-                                        handleImpersonate(user);
-                                      }}
-                                      disabled={isCurrentUser(user.id) || user.role?.is_organization_owner || impersonateMutation.isPending}
-                                      className="w-full text-left px-4 py-2 text-sm flex items-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                      style={{ color: theme.colors.textSecondary }}
-                                      onMouseEnter={(e) => {
-                                        if (!isCurrentUser(user.id) && !user.role?.is_organization_owner && !impersonateMutation.isPending) {
-                                          e.currentTarget.style.backgroundColor = theme.colors.background;
-                                          e.currentTarget.style.color = theme.colors.text;
-                                        }
-                                      }}
-                                      onMouseLeave={(e) => {
-                                        if (!isCurrentUser(user.id) && !user.role?.is_organization_owner && !impersonateMutation.isPending) {
-                                          e.currentTarget.style.backgroundColor = 'transparent';
-                                          e.currentTarget.style.color = theme.colors.textSecondary;
-                                        }
-                                      }}
-                                    >
-                                      <UserCog className="h-4 w-4 mr-2" />
-                                      Impersonate
-                                    </button>
-                                  )}
-                                  {canRevokeUsers && (
-                                    <>
-                                      <div className="my-1" style={{ borderTop: `1px solid ${theme.colors.border}` }}></div>
-                                      <button
-                                        onClick={() => {
-                                          handleRevoke(user);
-                                          setActionMenuOpen(null);
-                                          setMenuPosition(null);
-                                        }}
-                                        disabled={isCurrentUser(user.id) || user.role?.is_organization_owner || !canEditUserRole(user)}
-                                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                      >
-                                        <Trash2 className="h-4 w-4 mr-2" />
-                                        Revoke Access
-                                      </button>
-                                    </>
-                                  )}
+                                      <div className="py-1">
+                                        <button
+                                          onClick={() => {
+                                            handleView(user);
+                                            setActionMenuOpen(null);
+                                            setMenuPosition(null);
+                                          }}
+                                          className="w-full text-left px-4 py-2 text-sm flex items-center hover:bg-gray-50 transition-colors"
+                                          style={{ color: theme.colors.textSecondary }}
+                                        >
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          View Full Profile
+                                        </button>
+                                        {canEditUsers && canEditSpecificUser(user) && (
+                                          <button
+                                            onClick={() => {
+                                              handleEdit(user);
+                                              setActionMenuOpen(null);
+                                              setMenuPosition(null);
+                                            }}
+                                            className="w-full text-left px-4 py-2 text-sm flex items-center hover:bg-gray-50 transition-colors"
+                                            style={{ color: theme.colors.textSecondary }}
+                                          >
+                                            <Edit className="h-4 w-4 mr-2" />
+                                            Edit Information
+                                          </button>
+                                        )}
+                                        {canAssignRoles && (
+                                          <button
+                                            onClick={() => {
+                                              handleAssignRole(user);
+                                              setActionMenuOpen(null);
+                                              setMenuPosition(null);
+                                            }}
+                                            disabled={!canEditUserRole(user)}
+                                            className="w-full text-left px-4 py-2 text-sm flex items-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                                            style={{ color: theme.colors.textSecondary }}
+                                          >
+                                            <Shield className="h-4 w-4 mr-2" />
+                                            Change Permission Role
+                                          </button>
+                                        )}
+                                        {canImpersonate && (
+                                          <button
+                                            onClick={() => {
+                                              handleImpersonate(user);
+                                            }}
+                                            disabled={isCurrentUser(user.id) || user.role?.is_organization_owner || impersonateMutation.isPending}
+                                            className="w-full text-left px-4 py-2 text-sm flex items-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
+                                            style={{ color: theme.colors.textSecondary }}
+                                          >
+                                            <UserCog className="h-4 w-4 mr-2" />
+                                            Impersonate User
+                                          </button>
+                                        )}
+                                        {canRevokeUsers && (
+                                          <>
+                                            <div className="my-1 border-t" style={{ borderColor: theme.colors.border }}></div>
+                                            <button
+                                              onClick={() => {
+                                                handleRevoke(user);
+                                                setActionMenuOpen(null);
+                                                setMenuPosition(null);
+                                              }}
+                                              disabled={isCurrentUser(user.id) || user.role?.is_organization_owner || !canEditUserRole(user)}
+                                              className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-medium"
+                                            >
+                                              <Trash2 className="h-4 w-4 mr-2" />
+                                              Revoke Organization Access
+                                            </button>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+
+                        {/* Collapsible Detail Row */}
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={4} className="px-6 pb-4 animate-in slide-in-from-top-2 duration-200">
+                              <div
+                                className="p-5 rounded-xl border grid grid-cols-1 md:grid-cols-3 gap-6 shadow-inner"
+                                style={{
+                                  backgroundColor: theme.colors.surface + '80',
+                                  borderColor: theme.colors.border,
+                                }}
+                              >
+                                <div className="space-y-3">
+                                  <h5 className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: theme.colors.textSecondary }}>Contact & Identity</h5>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>Email Address</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <p className="text-sm font-medium" style={{ color: theme.colors.text }}>{user.email}</p>
+                                      {user.email_verified ? (
+                                        <Badge variant="success" className="text-[9px] px-1 py-0">Verified</Badge>
+                                      ) : (
+                                        <Badge variant="secondary" className="text-[9px] px-1 py-0">Unverified</Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>Phone Number</p>
+                                    <p className="text-sm font-medium mt-1" style={{ color: theme.colors.text }}>{user.phone || 'No phone provided'}</p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <h5 className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: theme.colors.textSecondary }}>Organization Access</h5>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>Accessible Branches</p>
+                                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                      {activeTab === 'all' && isMasterOrg ? (
+                                        user.branches && user.branches.length > 0 ? (
+                                          user.branches.map((branch: any) => (
+                                            <Badge
+                                              key={branch.id}
+                                              variant="secondary"
+                                              className="text-[10px] px-1.5 py-0.5 rounded-md"
+                                              style={{ backgroundColor: theme.colors.primary + '10', color: theme.colors.primary, border: `1px solid ${theme.colors.primary}20` }}
+                                            >
+                                              {branch.name}
+                                            </Badge>
+                                          ))
+                                        ) : (
+                                          <span className="text-xs font-medium italic" style={{ color: theme.colors.textSecondary }}>Restricted to Master only</span>
+                                        )
+                                      ) : (
+                                        <span className="text-xs font-medium" style={{ color: theme.colors.text }}>{organization?.name}</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>MFA Protection</p>
+                                    <p className="text-sm font-medium mt-1" style={{ color: user.mfa_enabled ? '#10b981' : theme.colors.textSecondary }}>
+                                      {user.mfa_enabled ? 'Two-Factor Authentication Enabled' : 'Not setup'}
+                                    </p>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                  <h5 className="text-[10px] uppercase tracking-wider font-bold mb-1" style={{ color: theme.colors.textSecondary }}>Activity Tracker</h5>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>Member Since</p>
+                                    <p className="text-sm font-medium mt-1" style={{ color: theme.colors.text }}>{user.joined_at ? formatDate(user.joined_at) : 'N/A'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium" style={{ color: theme.colors.textSecondary }}>Last Recorded Activity</p>
+                                    <p className="text-sm font-medium mt-1" style={{ color: theme.colors.text }}>{user.last_login_at ? formatDate(user.last_login_at) : 'Never logged in'}</p>
+                                  </div>
                                 </div>
                               </div>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-8 text-center" style={{ color: theme.colors.textSecondary }}>
+                    <td colSpan={4} className="px-6 py-3 text-center" style={{ color: theme.colors.textSecondary }}>
                       No users found. {search && 'Try adjusting your search.'}
                     </td>
                   </tr>
@@ -769,20 +844,20 @@ export default function UsersPage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium" style={{ color: theme.colors.textSecondary }}>Status</p>
-                        <span 
+                        <span
                           className="mt-1 inline-flex px-2 py-1 text-xs font-semibold rounded-full"
                           style={{
-                            backgroundColor: 
+                            backgroundColor:
                               userDetails.status === 'active'
                                 ? `${theme.colors.primary}33`
                                 : userDetails.status === 'suspended'
-                                ? `${theme.colors.primary}1A`
-                                : `${theme.colors.primary}1A`,
-                            color: 
+                                  ? `${theme.colors.primary}1A`
+                                  : `${theme.colors.primary}1A`,
+                            color:
                               userDetails.status === 'active'
                                 ? theme.colors.primary
                                 : theme.colors.textSecondary,
-                            border: 
+                            border:
                               userDetails.status === 'active'
                                 ? `1px solid ${theme.colors.primary}4D`
                                 : `1px solid ${theme.colors.border}`,
@@ -1024,7 +1099,7 @@ export default function UsersPage() {
                               // if we can assign this specific role to this specific user (considering target user's current role)
                               const roleLevel = getRoleHierarchyLevel(role);
                               const targetUserCurrentRoleLevel = getRoleHierarchyLevel(selectedUser.role);
-                              
+
                               // Organization owners can assign any role except owner
                               let canAssignThisRole = false;
                               if (isOrganizationOwner) {
@@ -1035,7 +1110,7 @@ export default function UsersPage() {
                                 canAssignThisRole = roleLevel > currentUserRoleLevel && roleLevel >= targetUserCurrentRoleLevel && !role.is_organization_owner;
                               }
                               const isCurrentRole = role.id === selectedUser.role?.id;
-                              
+
                               return (
                                 <button
                                   key={role.id}
@@ -1070,35 +1145,35 @@ export default function UsersPage() {
                                     }
                                   }}
                                 >
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center">
-                                    <div>
-                                      <p className="font-medium" style={{ color: theme.colors.text }}>{role.name}</p>
-                                      {role.description && (
-                                        <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>{role.description}</p>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center">
+                                      <div>
+                                        <p className="font-medium" style={{ color: theme.colors.text }}>{role.name}</p>
+                                        {role.description && (
+                                          <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>{role.description}</p>
+                                        )}
+                                      </div>
+                                      {role.is_organization_owner && (
+                                        <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
+                                          Owner
+                                        </span>
                                       )}
                                     </div>
-                                    {role.is_organization_owner && (
-                                      <span className="ml-2 px-2 py-0.5 text-xs font-medium bg-yellow-100 text-yellow-800 rounded-full">
-                                        Owner
+                                    {isCurrentRole && (
+                                      <CheckCircle2 className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                                    )}
+                                    {!canAssignThisRole && !isCurrentRole && (
+                                      <span className="text-xs" style={{ color: theme.colors.textSecondary }}>
+                                        {role.is_organization_owner ? 'Cannot change' : 'Insufficient permissions'}
                                       </span>
                                     )}
                                   </div>
-                                  {isCurrentRole && (
-                                    <CheckCircle2 className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                                  )}
-                                  {!canAssignThisRole && !isCurrentRole && (
-                                    <span className="text-xs" style={{ color: theme.colors.textSecondary }}>
-                                      {role.is_organization_owner ? 'Cannot change' : 'Insufficient permissions'}
-                                    </span>
-                                  )}
-                                </div>
-                              </button>
-                            );
+                                </button>
+                              );
                             })}
                         </div>
                       )}
-                      
+
                       {/* Custom Roles Section */}
                       {roles && roles.filter((role: any) => !role.is_default && !role.is_system_role).length > 0 && (
                         <div>
@@ -1110,7 +1185,7 @@ export default function UsersPage() {
                               // if we can assign this specific role to this specific user (considering target user's current role)
                               const roleLevel = getRoleHierarchyLevel(role);
                               const targetUserCurrentRoleLevel = getRoleHierarchyLevel(selectedUser.role);
-                              
+
                               // Organization owners can assign any role except owner
                               let canAssignThisRole = false;
                               if (isOrganizationOwner) {
@@ -1121,7 +1196,7 @@ export default function UsersPage() {
                                 canAssignThisRole = roleLevel > currentUserRoleLevel && roleLevel >= targetUserCurrentRoleLevel && !role.is_organization_owner;
                               }
                               const isCurrentRole = role.id === selectedUser.role?.id;
-                              
+
                               return (
                                 <button
                                   key={role.id}
@@ -1156,26 +1231,26 @@ export default function UsersPage() {
                                     }
                                   }}
                                 >
-                                <div className="flex items-center justify-between">
-                                  <div>
-                                    <p className="font-medium" style={{ color: theme.colors.text }}>{role.name}</p>
-                                    {role.description && (
-                                      <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>{role.description}</p>
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <p className="font-medium" style={{ color: theme.colors.text }}>{role.name}</p>
+                                      {role.description && (
+                                        <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>{role.description}</p>
+                                      )}
+                                    </div>
+                                    {isCurrentRole && (
+                                      <CheckCircle2 className="h-5 w-5" style={{ color: theme.colors.primary }} />
+                                    )}
+                                    {!canAssignThisRole && !isCurrentRole && (
+                                      <span className="text-xs" style={{ color: theme.colors.textSecondary }}>Insufficient permissions</span>
                                     )}
                                   </div>
-                                  {isCurrentRole && (
-                                    <CheckCircle2 className="h-5 w-5" style={{ color: theme.colors.primary }} />
-                                  )}
-                                  {!canAssignThisRole && !isCurrentRole && (
-                                    <span className="text-xs" style={{ color: theme.colors.textSecondary }}>Insufficient permissions</span>
-                                  )}
-                                </div>
-                              </button>
-                            );
+                                </button>
+                              );
                             })}
                         </div>
                       )}
-                      
+
                       {(!roles || roles.length === 0) && (
                         <p className="text-sm text-center py-4" style={{ color: theme.colors.textSecondary }}>No roles available</p>
                       )}
@@ -1231,7 +1306,7 @@ export default function UsersPage() {
                         type="checkbox"
                         {...registerRevoke('transfer_data')}
                         className="rounded"
-                        style={{ 
+                        style={{
                           borderColor: theme.colors.border,
                           accentColor: theme.colors.primary,
                         }}
@@ -1270,8 +1345,8 @@ export default function UsersPage() {
                       >
                         <option value="">Select a user...</option>
                         {data?.users
-                          ?.filter((u: any) => 
-                            u.id !== selectedUser.id && 
+                          ?.filter((u: any) =>
+                            u.id !== selectedUser.id &&
                             u.role?.id === selectedUser.role?.id &&
                             u.status === 'active'
                           )
@@ -1284,15 +1359,15 @@ export default function UsersPage() {
                       {revokeErrors.transfer_to_user_id && (
                         <p className="mt-1 text-sm" style={{ color: theme.colors.primary }}>{revokeErrors.transfer_to_user_id.message}</p>
                       )}
-                      {transferData && data?.users?.filter((u: any) => 
-                        u.id !== selectedUser.id && 
+                      {transferData && data?.users?.filter((u: any) =>
+                        u.id !== selectedUser.id &&
                         u.role?.id === selectedUser.role?.id &&
                         u.status === 'active'
                       ).length === 0 && (
-                        <p className="mt-1 text-sm" style={{ color: theme.colors.textSecondary }}>
-                          No users with the same role available for data transfer
-                        </p>
-                      )}
+                          <p className="mt-1 text-sm" style={{ color: theme.colors.textSecondary }}>
+                            No users with the same role available for data transfer
+                          </p>
+                        )}
                     </div>
                   )}
 

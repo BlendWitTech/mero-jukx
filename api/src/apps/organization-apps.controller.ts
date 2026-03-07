@@ -52,10 +52,12 @@ export class OrganizationAppsController {
   @ApiParam({ name: 'orgId', description: 'Organization ID' })
   @ApiResponse({ status: 200, description: 'Subscriptions retrieved successfully' })
   async getOrganizationApps(
+    @CurrentUser() user: any,
     @Param('orgId') orgId: string,
     @Query() query: SubscriptionQueryDto,
   ) {
-    return this.organizationAppsService.getOrganizationApps(orgId, query);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    return this.organizationAppsService.getOrganizationApps(finalOrgId, query);
   }
 
   @Get(':appId')
@@ -66,10 +68,12 @@ export class OrganizationAppsController {
   @ApiResponse({ status: 200, description: 'Subscription retrieved successfully' })
   @ApiResponse({ status: 404, description: 'Subscription not found' })
   async getSubscription(
+    @CurrentUser() user: any,
     @Param('orgId') orgId: string,
     @Param('appId', ParseIntPipe) appId: number,
   ) {
-    return this.organizationAppsService.getSubscription(orgId, appId);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    return this.organizationAppsService.getSubscription(finalOrgId, appId);
   }
 
   @Post()
@@ -87,10 +91,11 @@ export class OrganizationAppsController {
     @Body() dto: PurchaseAppDto,
     @Headers('origin') origin?: string,
   ) {
-    if (!organization || organization.id !== orgId) {
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    if (!organization || organization.id !== finalOrgId) {
       throw new Error('Organization mismatch');
     }
-    return this.organizationAppsService.purchaseApp(orgId, user.userId, dto, origin);
+    return this.organizationAppsService.purchaseApp(finalOrgId, user.userId, dto, origin);
   }
 
   @Put(':appId')
@@ -108,7 +113,8 @@ export class OrganizationAppsController {
     @Body() dto: UpdateSubscriptionDto,
     @Headers('origin') origin?: string,
   ) {
-    return this.organizationAppsService.updateSubscription(orgId, appId, dto, user.userId, origin);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    return this.organizationAppsService.updateSubscription(finalOrgId, appId, dto, user.userId, origin);
   }
 
   @Delete(':appId')
@@ -125,7 +131,8 @@ export class OrganizationAppsController {
     @Param('appId', ParseIntPipe) appId: number,
     @Body() dto: CancelSubscriptionDto,
   ) {
-    return this.organizationAppsService.cancelSubscription(orgId, appId, dto, user.userId);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    return this.organizationAppsService.cancelSubscription(finalOrgId, appId, dto, user.userId);
   }
 
   @Post(':appId/renew')
@@ -143,8 +150,9 @@ export class OrganizationAppsController {
     @Body('payment_method') paymentMethod: 'stripe' | 'esewa',
     @Headers('origin') origin?: string,
   ) {
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
     return this.organizationAppsService.renewSubscription(
-      orgId,
+      finalOrgId,
       appId,
       paymentMethod,
       user.userId,
@@ -164,8 +172,9 @@ export class OrganizationAppsController {
     @Param('orgId') orgId: string,
     @Param('appId', ParseIntPipe) appId: number,
   ) {
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
     return this.organizationAppsService.updateSubscription(
-      orgId,
+      finalOrgId,
       appId,
       { auto_renew: true },
       user.userId,
@@ -184,8 +193,9 @@ export class OrganizationAppsController {
     @Param('orgId') orgId: string,
     @Param('appId', ParseIntPipe) appId: number,
   ) {
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
     return this.organizationAppsService.updateSubscription(
-      orgId,
+      finalOrgId,
       appId,
       { auto_renew: false },
       user.userId,
@@ -206,10 +216,8 @@ export class OrganizationAppsController {
     @Body() dto: GrantAppAccessDto,
     @Headers('origin') origin?: string,
   ) {
-    if (dto.app_id !== appId) {
-      throw new BadRequestException('App ID mismatch');
-    }
-    const access = await this.appAccessService.grantAccess(user.userId, orgId, dto, origin);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    const access = await this.appAccessService.grantAccess(user.userId, finalOrgId, dto, origin);
     return {
       success: true,
       message: 'App access granted successfully',
@@ -231,10 +239,8 @@ export class OrganizationAppsController {
     @Body() dto: RevokeAppAccessDto,
     @Headers('origin') origin?: string,
   ) {
-    if (dto.app_id !== appId) {
-      throw new BadRequestException('App ID mismatch');
-    }
-    await this.appAccessService.revokeAccess(user.userId, orgId, dto, origin);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    await this.appAccessService.revokeAccess(user.userId, finalOrgId, dto, origin);
     return {
       success: true,
       message: 'App access revoked successfully',
@@ -257,7 +263,8 @@ export class OrganizationAppsController {
     @Body('role_id', ParseIntPipe) roleId: number,
     @Headers('origin') origin?: string,
   ) {
-    const access = await this.appAccessService.grantAccess(user.userId, orgId, {
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    const access = await this.appAccessService.grantAccess(user.userId, finalOrgId, {
       user_id: userId,
       app_id: appId,
       role_id: roleId,
@@ -287,8 +294,9 @@ export class OrganizationAppsController {
     if (dto.app_id !== appId) {
       throw new BadRequestException('App ID mismatch');
     }
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
     // Grant access handles updates if user already has access
-    const access = await this.appAccessService.grantAccess(user.userId, orgId, {
+    const access = await this.appAccessService.grantAccess(user.userId, finalOrgId, {
       user_id: dto.user_id,
       app_id: dto.app_id,
       role_id: dto.role_id,
@@ -309,11 +317,13 @@ export class OrganizationAppsController {
   @ApiResponse({ status: 200, description: 'App access list retrieved successfully' })
   @ApiResponse({ status: 500, description: 'Internal server error' })
   async getAppAccess(
+    @CurrentUser() user: any,
     @Param('orgId') orgId: string,
     @Param('appId', ParseIntPipe) appId: number,
   ) {
     try {
-      return await this.appAccessService.getAppAccessUsers(orgId, appId);
+      const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+      return await this.appAccessService.getAppAccessUsers(finalOrgId, appId);
     } catch (error) {
       console.error('Error in getAppAccess:', error);
       throw error;
@@ -329,7 +339,8 @@ export class OrganizationAppsController {
     @CurrentUser() user: any,
     @Param('orgId') orgId: string,
   ) {
-    return this.appAccessService.getUserAccessibleApps(user.userId, orgId);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    return this.appAccessService.getUserAccessibleApps(user.userId, finalOrgId);
   }
 
   @Get(':appId/access/check')
@@ -343,7 +354,8 @@ export class OrganizationAppsController {
     @Param('orgId') orgId: string,
     @Param('appId', ParseIntPipe) appId: number,
   ) {
-    const hasAccess = await this.appAccessService.getUserAppAccess(user.userId, orgId, appId);
+    const finalOrgId = orgId === 'me' ? user.organizationId : orgId;
+    const hasAccess = await this.appAccessService.getUserAppAccess(user.userId, finalOrgId, appId);
     return { has_access: hasAccess };
   }
 }

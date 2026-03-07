@@ -18,6 +18,7 @@ export enum OrganizationAppStatus {
   ACTIVE = 'active',
   CANCELLED = 'cancelled',
   EXPIRED = 'expired',
+  PENDING_PAYMENT = 'pending_payment',
 }
 
 export enum OrganizationAppBillingPeriod {

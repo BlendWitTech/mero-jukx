@@ -1,7 +1,0 @@
-
-Message: total_amount=14000,transaction_uuid=5faa567a-c07f-44a1-a090-41d0e4991929,product_code=EPAYTEST
-Expected: RrSAWG/9OBXpIvoOMTGcQ9GW03tyazIokr2wuEA+VSI=
-With Default Key: DLNXIePRp84zWK7NFCsWg8r9k4FKptmZB7Y7oSLDI+A=
-With Empty Key:   RrSAWG/9OBXpIvoOMTGcQ9GW03tyazIokr2wuEA+VSI=
-Match Default? false
-Match Empty?   true

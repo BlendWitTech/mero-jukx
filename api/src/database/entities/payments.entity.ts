@@ -22,6 +22,10 @@ export enum PaymentStatus {
 export enum PaymentGateway {
   ESEWA = 'esewa',
   STRIPE = 'stripe',
+  KHALTI = 'khalti',
+  CONNECT_IPS = 'connect_ips',
+  PAYPAL = 'paypal',
+  IME_PAY = 'ime_pay',
 }
 
 export enum PaymentType {

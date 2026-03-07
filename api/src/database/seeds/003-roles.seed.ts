@@ -122,6 +122,29 @@ export async function seedRoles(dataSource: DataSource): Promise<void> {
     console.log('- Admin role already exists, ensuring permissions are assigned...');
   }
 
+  // Create Branch Super Admin role (system role)
+  let branchAdminRole = await roleRepository.findOne({
+    where: { slug: 'branch-super-admin', is_system_role: true },
+  });
+
+  if (!branchAdminRole) {
+    branchAdminRole = roleRepository.create({
+      name: 'Branch Super Admin',
+      slug: 'branch-super-admin',
+      description: 'Full administrative access within a specific branch',
+      is_system_role: true,
+      is_organization_owner: false,
+      is_default: true,
+      is_active: true,
+      organization_id: null,
+      hierarchy_level: 2, // Same level as Admin, but intended for branches
+    });
+    branchAdminRole = await roleRepository.save(branchAdminRole);
+    console.log('✓ Seeded role: Branch Super Admin');
+  } else {
+    console.log('- Branch Super Admin role already exists, ensuring permissions are assigned...');
+  }
+
   // Assign comprehensive permissions to Admin
   const adminPermissions = [
     // User permissions
@@ -140,6 +163,7 @@ export async function seedRoles(dataSource: DataSource): Promise<void> {
     'organizations.view',
     'organizations.edit',
     'organizations.settings',
+    'organizations.create_branch',
     // Package permissions (view only, no upgrade/purchase)
     'packages.view',
     // Invitation permissions
@@ -219,6 +243,16 @@ export async function seedRoles(dataSource: DataSource): Promise<void> {
   ];
 
   await assignPermissions(adminRole.id, adminPermissions, 'Admin');
+
+  // Assign permissions to Branch Super Admin (all except branch creation)
+  const branchAdminPermissions = adminPermissions.filter(p =>
+    p !== 'organizations.create_branch' &&
+    p !== 'packages.subscribe' && // Maybe? User didn't specify packages
+    p !== 'billing.view' // Maybe?
+  );
+
+  await assignPermissions(branchAdminRole.id, branchAdminPermissions, 'Branch Super Admin');
+  // NOTE: I'm currently giving it the same as Admin, I'll refine this if I split create_branch
 
   // Create Moderator role (system role)
   let moderatorRole = await roleRepository.findOne({

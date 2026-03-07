@@ -5,6 +5,7 @@ import { CrmQuote, CrmQuoteItem } from '@src/database/entities/crm_quotes.entity
 import { CreateQuoteDto, UpdateQuoteDto } from '../dto/quote.dto';
 import { InvoicesService } from './invoices.service';
 import { CreateInvoiceDto } from '../dto/invoice.dto';
+import { EmailService } from '@src/common/services/email.service';
 
 @Injectable()
 export class QuotesService {
@@ -14,6 +15,7 @@ export class QuotesService {
         @InjectRepository(CrmQuoteItem)
         private quoteItemsRepository: Repository<CrmQuoteItem>,
         private invoicesService: InvoicesService,
+        private readonly emailService: EmailService,
     ) { }
 
     async create(
@@ -172,5 +174,51 @@ export class QuotesService {
         await this.quotesRepository.save(quote);
 
         return { invoiceId: invoice.id };
+    }
+
+    async sendEmail(id: string, organizationId: string, to?: string, subject?: string, message?: string): Promise<void> {
+        const quote = await this.findOne(id, organizationId);
+        const recipient = to || quote.client?.email;
+
+        if (!recipient) {
+            throw new Error('No recipient email specified and client has no email on file');
+        }
+
+        const emailSubject = subject || `Quote #${quote.number} from Mero CRM`;
+
+        const html = `
+            <h2>Quote #${quote.number}</h2>
+            <p>Dear ${quote.client?.name || 'Customer'},</p>
+            <p>${message || 'Please find your quote details below.'}</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #eee;">
+                        <th style="text-align: left; padding: 8px;">Item</th>
+                        <th style="text-align: right; padding: 8px;">Qty</th>
+                        <th style="text-align: right; padding: 8px;">Price</th>
+                        <th style="text-align: right; padding: 8px;">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${quote.items.map(item => `
+                        <tr style="border-bottom: 1px solid #eee;">
+                            <td style="padding: 8px;">${item.itemName}</td>
+                            <td style="text-align: right; padding: 8px;">${item.quantity}</td>
+                            <td style="text-align: right; padding: 8px;">${quote.currency || 'USD'} ${item.price}</td>
+                            <td style="text-align: right; padding: 8px;">${quote.currency || 'USD'} ${item.total}</td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            <div style="text-align: right; margin-top: 20px;">
+                <p><strong>Subtotal: ${quote.currency || 'USD'} ${quote.subTotal}</strong></p>
+                <p>Tax (${quote.taxRate}%): ${quote.currency || 'USD'} ${quote.taxTotal}</p>
+                <p>Discount: ${quote.currency || 'USD'} ${quote.discount}</p>
+                <p style="font-size: 1.2em;"><strong>Total: ${quote.currency || 'USD'} ${quote.total}</strong></p>
+            </div>
+            <p>We look forward to working with you!</p>
+        `;
+
+        await this.emailService.sendEmail(recipient, emailSubject, html);
     }
 }

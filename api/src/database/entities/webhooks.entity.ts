@@ -36,13 +36,12 @@ export enum WebhookEvent {
 
 @Entity('webhooks')
 @Index(['organization_id'])
-@Index(['status'])
+@Index('IDX_WEBHOOK_STATUS', ['status'])
 export class Webhook {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   organization_id: string;
 
   @ManyToOne(() => Organization, { onDelete: 'CASCADE' })

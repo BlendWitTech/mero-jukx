@@ -29,3 +29,4 @@ export * from './Dialog';
 export * from './Sheet';
 export * from './ScrollArea';
 export * from './Toast';
+export * from './SearchableSelect';

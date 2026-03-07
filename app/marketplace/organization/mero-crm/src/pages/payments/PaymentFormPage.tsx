@@ -56,7 +56,7 @@ export default function PaymentFormPage() {
                 paymentMethod: payment.paymentMethod,
                 paymentDate: payment.paymentDate.split('T')[0],
                 notes: payment.notes || '',
-                status: payment.status === 'failed' || payment.status === 'refunded' ? payment.status : payment.status,
+                status: payment.status as any,
             });
         } catch (error: any) {
             toast.error(error.response?.data?.message || 'Failed to fetch payment');

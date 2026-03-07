@@ -51,4 +51,28 @@ export class BoardColumnsService {
         column.position = newPosition;
         return this.columnsRepository.save(column);
     }
+
+    async reorder(boardId: string, columnId: string, newPosition: number): Promise<BoardColumn[]> {
+        const columns = await this.columnsRepository.find({
+            where: { board_id: boardId },
+            order: { position: 'ASC' },
+        });
+
+        const columnToMove = columns.find(c => c.id === columnId);
+        if (!columnToMove) throw new NotFoundException('Column not found');
+
+        // Simple reorder logic: 
+        // 1. Remove column from current list
+        const filteredColumns = columns.filter(c => c.id !== columnId);
+
+        // 2. Insert into new position
+        filteredColumns.splice(newPosition, 0, columnToMove);
+
+        // 3. Update all positions
+        for (let i = 0; i < filteredColumns.length; i++) {
+            filteredColumns[i].position = i;
+        }
+
+        return this.columnsRepository.save(filteredColumns);
+    }
 }

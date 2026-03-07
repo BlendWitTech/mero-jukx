@@ -1,32 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useAuthStore } from '../store/authStore';
 import api from '../services/api';
-
-export type ThemeMode = 'light' | 'dark' | 'system';
-
-export interface ThemeColors {
-  primary: string;
-  secondary: string;
-  background: string;
-  surface: string;
-  text: string;
-  textSecondary: string;
-  border: string;
-  accent: string;
-  danger: string;
-  error: string;
-  warning: string;
-  info: string;
-  success: string;
-}
-
-export interface OrganizationTheme {
-  mode: ThemeMode;
-  colors: ThemeColors;
-  fontFamily?: string;
-  borderRadius?: string;
-  customCSS?: string;
-}
+import { ThemeMode, ThemeColors, OrganizationTheme } from '../types/theme';
 
 interface ThemeContextType {
   theme: OrganizationTheme;
@@ -80,7 +55,17 @@ const defaultDarkTheme: OrganizationTheme = {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const { isAuthenticated, user } = useAuthStore();
+  // Use getState() + subscribe instead of the useAuthStore() hook to avoid
+  // Zustand's useSyncExternalStore depending on stale-cached React dispatcher
+  const [authState, setAuthState] = useState(() => useAuthStore.getState());
+  useEffect(() => {
+    // Subscribe to auth store changes without using the hook
+    const unsubscribe = useAuthStore.subscribe((state) => {
+      setAuthState(state);
+    });
+    return unsubscribe;
+  }, []);
+  const { isAuthenticated, user } = authState;
   // Initialize with theme from localStorage or default
   const [theme, setThemeState] = useState<OrganizationTheme>(() => {
     // Check localStorage for theme preference first
@@ -649,6 +634,11 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     root.style.setProperty('--theme-font-family', theme.fontFamily || currentTheme.fontFamily || 'Inter, system-ui, sans-serif');
     root.style.setProperty('--theme-border-radius', theme.borderRadius || currentTheme.borderRadius || '0.5rem');
 
+    // Theme-aware hover colors (low opacity primary)
+    root.style.setProperty('--theme-hover', `${colors.primary}15`); // ~8% opacity
+    root.style.setProperty('--theme-hover-strong', `${colors.primary}25`); // ~15% opacity
+    root.style.setProperty('--theme-surface-hover', isDark ? '#ffffff08' : '#00000005');
+
     // Also set data attributes for more specific targeting
     root.setAttribute('data-theme', isDark ? 'dark' : 'light');
     root.setAttribute('data-theme-mode', theme.mode);
@@ -670,10 +660,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
 
     // Apply theme class to body and html
-    document.body.classList.remove('light-theme', 'dark-theme');
+    document.body.classList.remove('light-theme', 'dark-theme', 'dark');
     document.body.classList.add(`${isDark ? 'dark' : 'light'}-theme`);
-    root.classList.remove('light-theme', 'dark-theme');
+    root.classList.remove('light-theme', 'dark-theme', 'dark');
     root.classList.add(`${isDark ? 'dark' : 'light'}-theme`);
+
+    if (isDark) {
+      document.body.classList.add('dark');
+      root.classList.add('dark');
+    }
   }, [theme, isDark]);
 
   return (

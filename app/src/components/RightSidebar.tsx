@@ -314,9 +314,11 @@ export default function RightSidebar({
             >
               <ChevronRight className="h-5 w-5" />
             </button>
-            <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: theme.colors.text }}>
-              {isAppOpen ? 'App Controls' : 'Quick Access'}
-            </h2>
+            {!isAppOpen && (
+              <h2 className="text-sm font-semibold uppercase tracking-wide" style={{ color: theme.colors.text }}>
+                Quick Access
+              </h2>
+            )}
           </div>
           {/* Close and minimize buttons - show when app is open and right sidebar is available */}
           {isAppOpen && (

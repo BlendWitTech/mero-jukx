@@ -27,6 +27,7 @@ import {
 import { Session } from '../database/entities/sessions.entity';
 import { EmailService } from '../common/services/email.service';
 import { RedisService } from '../common/services/redis.service';
+import { SparrowSmsService } from '../communication/sparrow-sms.service';
 import { RegisterOrganizationDto } from './dto/register-organization.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyMfaLoginDto } from './dto/verify-mfa-login.dto';
@@ -55,11 +56,13 @@ export class AuthService {
     private emailService: EmailService,
     private redisService: RedisService,
     private dataSource: DataSource,
+    private sparrowSmsService: SparrowSmsService,
   ) { }
 
   async validateUser(email: string, password: string): Promise<User | null> {
+    const normalizedEmail = email.toLowerCase().trim();
     const user = await this.userRepository.findOne({
-      where: { email, status: UserStatus.ACTIVE },
+      where: { email: normalizedEmail, status: UserStatus.ACTIVE },
     });
 
     if (!user || !user.password_hash) {
@@ -123,8 +126,9 @@ export class AuthService {
       //          (because abcd@gmail.com is already Org1's email)
 
       // Check if organization email already exists (must be unique across all organizations)
+      const orgEmail = dto.email.toLowerCase().trim();
       const existingOrgByEmail = await this.organizationRepository.findOne({
-        where: { email: dto.email },
+        where: { email: orgEmail },
       });
 
       if (existingOrgByEmail) {
@@ -160,10 +164,11 @@ export class AuthService {
       // Handle organization owner (new or existing user)
       let ownerUser: User;
 
+      const ownerEmail = dto.owner_email.toLowerCase().trim();
       if (dto.is_existing_user) {
         // Existing user - must be logged in (handled by controller/auth guard)
         ownerUser = await this.userRepository.findOne({
-          where: { email: dto.owner_email, status: UserStatus.ACTIVE },
+          where: { email: ownerEmail, status: UserStatus.ACTIVE },
         });
 
         if (!ownerUser) {
@@ -183,13 +188,13 @@ export class AuthService {
 
         // Check if owner already has an organization where the organization email equals the owner email
         const hasOrgWithOwnerEmail = ownerOrganizations.some(
-          (membership) => membership.organization.email === dto.owner_email,
+          (membership) => membership.organization.email === ownerEmail,
         );
 
         // If the new organization email equals owner email AND owner already has an org with that email, reject
-        if (dto.email === dto.owner_email && hasOrgWithOwnerEmail) {
+        if (orgEmail === ownerEmail && hasOrgWithOwnerEmail) {
           throw new ConflictException(
-            `You already have an organization with email "${dto.owner_email}". ` +
+            `You already have an organization with email "${ownerEmail}". ` +
             `An email address can only be used as an organization email for one organization. ` +
             `Please use a different email address for this organization.`,
           );
@@ -206,7 +211,7 @@ export class AuthService {
             expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
           });
 
-          await this.emailVerificationRepository.save(emailVerification);
+          await queryRunner.manager.save(emailVerification);
 
           const appUrl = origin || this.configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
           const verificationUrl = `${appUrl}/verify-email?token=${verificationToken}`;
@@ -230,7 +235,7 @@ export class AuthService {
       } else {
         // New user - check if email already exists
         const existingUser = await this.userRepository.findOne({
-          where: { email: dto.owner_email },
+          where: { email: ownerEmail },
         });
 
         if (existingUser) {
@@ -247,7 +252,7 @@ export class AuthService {
         // Create new user
         const passwordHash = await bcrypt.hash(dto.owner_password, 10);
         ownerUser = this.userRepository.create({
-          email: dto.owner_email,
+          email: ownerEmail,
           password_hash: passwordHash,
           first_name: dto.owner_first_name,
           last_name: dto.owner_last_name,
@@ -256,7 +261,7 @@ export class AuthService {
           status: UserStatus.ACTIVE,
         });
 
-        await this.userRepository.save(ownerUser);
+        await queryRunner.manager.save(ownerUser);
 
         // Generate email verification token
         const verificationToken = crypto.randomBytes(32).toString('hex');
@@ -268,7 +273,7 @@ export class AuthService {
           expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         });
 
-        await this.emailVerificationRepository.save(emailVerification);
+        await queryRunner.manager.save(emailVerification);
 
         // Send verification email (will be logged to console in development if SMTP not configured)
         const appUrl = origin || this.configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
@@ -289,7 +294,7 @@ export class AuthService {
       const organization = this.organizationRepository.create({
         name: dto.name,
         slug,
-        email: dto.email,
+        email: orgEmail,
         phone: dto.phone || null,
         address: dto.address || null,
         city: dto.city || null,
@@ -309,27 +314,6 @@ export class AuthService {
       });
 
       const savedOrganization = await queryRunner.manager.save(organization);
-
-      // Create initial "Main Branch" automatically
-      const mainBranchSlug = this.generateSlug(`${dto.name}-main`);
-      const mainBranch = this.organizationRepository.create({
-        name: `${dto.name} (Main Branch)`,
-        slug: mainBranchSlug,
-        email: dto.email,
-        parent_id: savedOrganization.id,
-        org_type: OrganizationType.BRANCH,
-        status: OrganizationStatus.ACTIVE,
-        package_id: packageId,
-        email_verified: true,
-        timezone: dto.timezone,
-        currency: dto.currency,
-        language: dto.language,
-        user_limit: savedOrganization.user_limit,
-        role_limit: savedOrganization.role_limit,
-        branch_limit: 0, // Branches don't need branch limits
-      });
-
-      const savedMainBranch = await queryRunner.manager.save(mainBranch);
 
       // Get Organization Owner role
       const ownerRole = await this.roleRepository.findOne({
@@ -351,17 +335,6 @@ export class AuthService {
 
       await queryRunner.manager.save(mainMembership);
 
-      // Also create membership for the owner in the Main Branch
-      const branchMembership = this.memberRepository.create({
-        user_id: ownerUser.id,
-        organization_id: savedMainBranch.id,
-        role_id: ownerRole.id,
-        status: OrganizationMemberStatus.ACTIVE,
-        joined_at: new Date(),
-      });
-
-      await queryRunner.manager.save(branchMembership);
-
       // Generate organization email verification token
       const orgVerificationToken = crypto.randomBytes(32).toString('hex');
       const orgEmailVerification = this.emailVerificationRepository.create({
@@ -372,7 +345,7 @@ export class AuthService {
         expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
       });
 
-      await this.emailVerificationRepository.save(orgEmailVerification);
+      await queryRunner.manager.save(orgEmailVerification);
 
       // Prepare organization details for email
       const organizationDetails = {
@@ -465,18 +438,36 @@ export class AuthService {
       throw new UnauthorizedException('You are not a member of any organization');
     }
 
-    // If user has only one organization, automatically use it
-    if (memberships.length === 1) {
-      return this.login(loginDto, memberships[0].organization_id);
+    // Filter out MAIN accounts if user has a membership in a BRANCH of that MAIN account
+    // This reduces confusion during initial registration/login
+    const parentIdsWithBranches = memberships
+      .filter((m) => m.organization.org_type === (OrganizationType.BRANCH as any) && m.organization.parent_id)
+      .map((m) => m.organization.parent_id);
+
+    const filteredMemberships = memberships.filter((m) => {
+      // If it's a MAIN account and there is at least one branch for it in the user's memberships, hide the MAIN account
+      if (
+        m.organization.org_type === (OrganizationType.MAIN as any) &&
+        parentIdsWithBranches.includes(m.organization.id)
+      ) {
+        return false;
+      }
+      return true;
+    });
+
+    // If user has only one organization (after filtering), automatically use it
+    if (filteredMemberships.length === 1) {
+      return this.login(loginDto, filteredMemberships[0].organization_id);
     }
 
     // Return organizations for user to select
     return {
       requires_organization_selection: true,
-      organizations: memberships.map((m) => ({
+      organizations: filteredMemberships.map((m) => ({
         id: m.organization_id,
-        name: m.organization.name,
+        name: m.organization.org_type === (OrganizationType.MAIN as any) ? 'Main Branch' : m.organization.name,
         slug: m.organization.slug,
+        org_type: m.organization.org_type,
         role: m.role?.name || 'Member',
       })),
       message: 'Please select an organization to continue',
@@ -954,7 +945,7 @@ export class AuthService {
       requires_organization_selection: true,
       organizations: mfaOrganizations.map((m) => ({
         id: m.organization_id,
-        name: m.organization.name,
+        name: m.organization.org_type === (OrganizationType.MAIN as any) ? 'Main Branch' : m.organization.name,
         slug: m.organization.slug,
         role: m.role?.name || 'Member',
       })),
@@ -1039,13 +1030,58 @@ export class AuthService {
   }
 
   async verifyEmail(token: string): Promise<{ message: string }> {
+    console.log(`[AuthService] verifyEmail called, token prefix: ${token?.substring(0, 8)}...`);
+
+    // Use raw query first to bypass any TypeORM enum hydration issues
+    const rawRows = await this.dataSource.query(
+      `SELECT id, user_id, email, token, type, expires_at, verified_at FROM email_verifications WHERE token = $1 LIMIT 1`,
+      [token],
+    );
+
+    if (!rawRows || rawRows.length === 0) {
+      console.warn(`[AuthService] Token not found in DB: ${token?.substring(0, 8)}...`);
+      throw new BadRequestException('Invalid verification token');
+    }
+
+    const raw = rawRows[0];
+    console.log(`[AuthService] Token found — type: ${raw.type}, verified_at: ${raw.verified_at}`);
+
+    // Re-fetch via ORM so we get a proper entity for saving
     const verification = await this.emailVerificationRepository.findOne({
       where: { token },
-      relations: ['user'],
     });
 
     if (!verification) {
-      throw new BadRequestException('Invalid verification token');
+      // Fallback: build a minimal object from raw data to still serve the request
+      console.warn(`[AuthService] TypeORM findOne returned null despite raw row existing — using raw data`);
+      const expiresAt = new Date(raw.expires_at);
+      if (expiresAt < new Date()) {
+        throw new BadRequestException('Verification token has expired');
+      }
+      if (raw.verified_at) {
+        if (raw.type === EmailVerificationType.ORGANIZATION_EMAIL) {
+          return { message: 'Organization email is already verified' };
+        }
+        return { message: 'Email is already verified' };
+      }
+      // Mark verified via raw query
+      await this.dataSource.query(
+        `UPDATE email_verifications SET verified_at = NOW() WHERE token = $1`,
+        [token],
+      );
+      if (raw.type === EmailVerificationType.ORGANIZATION_EMAIL) {
+        await this.dataSource.query(
+          `UPDATE organizations SET email_verified = true WHERE email = $1`,
+          [raw.email],
+        );
+        return { message: 'Organization email verified successfully' };
+      } else {
+        await this.dataSource.query(
+          `UPDATE users SET email_verified = true, email_verified_at = NOW() WHERE id = $1`,
+          [raw.user_id],
+        );
+        return { message: 'Email verified successfully' };
+      }
     }
 
     if (verification.expires_at < new Date()) {
@@ -1096,7 +1132,7 @@ export class AuthService {
       }
     } else {
       // Update user email verification
-      const user = verification.user;
+      const user = await this.userRepository.findOne({ where: { id: verification.user_id } });
       if (!user) {
         throw new BadRequestException('User associated with this verification token not found');
       }
@@ -1105,6 +1141,59 @@ export class AuthService {
       await this.userRepository.save(user);
       return { message: 'Email verified successfully' };
     }
+  }
+
+  async resendVerificationEmail(email: string, origin?: string): Promise<{ message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.userRepository.findOne({
+      where: { email: normalizedEmail, status: UserStatus.ACTIVE },
+    });
+
+    if (!user) {
+      // Don't reveal if user exists
+      return { message: 'If an unverified account exists with this email, a new verification link has been sent' };
+    }
+
+    if (user.email_verified) {
+      return { message: 'Your email is already verified. You can login now.' };
+    }
+
+    // Delete old unverified tokens for this user/email to avoid unique conflicts
+    await this.dataSource.query(
+      `DELETE FROM email_verifications WHERE user_id = $1 AND verified_at IS NULL AND type = $2`,
+      [user.id, EmailVerificationType.REGISTRATION],
+    );
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    const emailVerification = this.emailVerificationRepository.create({
+      user_id: user.id,
+      email: normalizedEmail,
+      token: verificationToken,
+      type: EmailVerificationType.REGISTRATION,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
+    });
+    await this.emailVerificationRepository.save(emailVerification);
+
+    const appUrl = origin || this.configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
+    const verificationUrl = `${appUrl}/verify-email?token=${verificationToken}`;
+
+    try {
+      await this.emailService.sendEmail(
+        normalizedEmail,
+        'Verify Your Email Address',
+        `
+          <h2>Email Verification</h2>
+          <p>Click the link below to verify your email address:</p>
+          <p><a href="${verificationUrl}">Verify Email</a></p>
+          <p>This link will expire in 24 hours.</p>
+          <p>If you did not create an account, please ignore this email.</p>
+        `,
+      );
+    } catch (emailError) {
+      console.error('[AuthService] Failed to send resend verification email:', emailError);
+    }
+
+    return { message: 'If an unverified account exists with this email, a new verification link has been sent' };
   }
 
   async forgotPassword(email: string, origin?: string): Promise<{ message: string }> {
@@ -1168,6 +1257,18 @@ export class AuthService {
         <p>If you did not request this, please ignore this email.</p>
       `,
     );
+
+    // Send supplemental SMS notification via Sparrow SMS if user has a phone number
+    if (user.phone) {
+      try {
+        await this.sparrowSmsService.sendSms(
+          user.phone,
+          `Mero Jugx: A password reset link has been sent to your email ${user.email}. If you did not request this, please ignore.`,
+        );
+      } catch (_err) {
+        // SMS failure must never block the password reset flow
+      }
+    }
 
     return { message: 'If the email exists, a password reset link has been sent' };
   }
@@ -1273,7 +1374,24 @@ export class AuthService {
 
     // Update password
     const user = verification.user;
+
+    // Prevent reusing the same password
+    console.log(`[Password Reset Debug] User ID: ${user.id}`);
+    console.log(`[Password Reset Debug] Has password hash: ${!!user.password_hash}`);
+    const isSamePassword = await bcrypt.compare(newPassword, user.password_hash);
+    console.log(`[Password Reset Debug] isSamePassword: ${isSamePassword}`);
+
+    if (isSamePassword) {
+      console.log(`[Password Reset Debug] Blocking reset due to same password`);
+      throw new BadRequestException('New password cannot be the same as your current password');
+    }
+
     user.password_hash = await bcrypt.hash(newPassword, 10);
+
+    // Also mark user as verified since they've successfully accessed their email
+    user.email_verified = true;
+    user.email_verified_at = new Date();
+
     await this.userRepository.save(user);
 
     return { message: 'Password reset successfully' };

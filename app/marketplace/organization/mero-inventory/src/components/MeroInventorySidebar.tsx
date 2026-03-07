@@ -9,6 +9,14 @@ import {
     ChevronLeft,
     LogOut,
     Settings,
+    Send,
+    DollarSign,
+    AlertTriangle,
+    FileText,
+    ClipboardCheck,
+    RotateCcw,
+    TrendingDown,
+    Percent,
 } from 'lucide-react';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import { useAuthStore } from '@frontend/store/authStore';
@@ -77,8 +85,13 @@ export default function MeroInventorySidebar({
             icon: ClipboardList,
         },
         {
+            name: 'Stock Transfers',
+            href: '/transfers',
+            icon: Send,
+        },
+        {
             name: 'Stock Movements',
-            href: '/stock/movements',
+            href: '/movements',
             icon: History,
         },
         {
@@ -92,21 +105,40 @@ export default function MeroInventorySidebar({
             icon: Package,
         },
         {
-            name: 'Suppliers',
-            href: '/suppliers',
-            icon: ClipboardList, // Using ClipboardList as placeholder, maybe Truck or Users better
+            name: 'Purchase Requisitions',
+            href: '/purchase-requisitions',
+            icon: FileText,
         },
         {
-            name: 'Purchase Orders',
-            href: '/purchase-orders',
-            icon: Package, // Reuse Package or find better
+            name: 'Goods Receipt Notes',
+            href: '/grn',
+            icon: ClipboardCheck,
         },
-        // Settings could be added later
-        // {
-        //     name: 'Settings',
-        //     href: '/settings',
-        //     icon: Settings,
-        // },
+        {
+            name: 'Backorders',
+            href: '/backorders',
+            icon: RotateCcw,
+        },
+        {
+            name: 'Commission',
+            href: '/commission',
+            icon: Percent,
+        },
+        {
+            name: 'Stock Valuation',
+            href: '/valuation',
+            icon: DollarSign,
+        },
+        {
+            name: 'Expiry Alerts',
+            href: '/expiry-alerts',
+            icon: AlertTriangle,
+        },
+        {
+            name: 'Aging Analysis',
+            href: '/aging',
+            icon: TrendingDown,
+        },
     ];
 
     const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);

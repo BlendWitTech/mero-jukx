@@ -2,7 +2,7 @@
 
 ## Overview
 
-This repository uses a protected branching strategy with three main branches and feature branch workflows. Direct pushes to protected branches are not allowed.
+This repository uses a protected branching strategy with four main branches and a strict feature branch workflow. Direct pushes to protected branches are not allowed for contributors.
 
 ## Branch Structure
 
@@ -26,27 +26,26 @@ main (🔒 LOCKED - Owner Only)
 
 ### Main Branch (`main`)
 - **Access**: Repository owner only
-- **Protection**: 
+- **Protection**:
   - Direct pushes blocked for everyone except owner
   - Pull requests require owner approval
   - All CI checks must pass
-  - No force pushes allowed
-  - No branch deletion allowed
+  - No force pushes or branch deletion
 
 ### Protected Branches (`development`, `testing`, `production`)
-- **Access**: Users with assigned permissions
+- **Access**: Users with assigned permissions (see [COLLABORATOR_ACCESS.md](COLLABORATOR_ACCESS.md))
 - **Protection**:
   - Direct pushes blocked (must use feature branches)
   - Pull requests required for merging
   - All CI checks must pass
-  - At least one approval required (depending on team size)
-  - No force pushes allowed
+  - At least one approval required
+  - No force pushes
 
 ### Feature Branches
 - **Naming Convention**: `{parent-branch}/feature-{description}`
   - Examples: `development/feature-user-auth`, `testing/feature-payment`, `production/feature-api-v2`
 - **Access**: Any user can create and push to feature branches
-- **Workflow**: 
+- **Workflow**:
   1. Create feature branch from parent branch
   2. Make changes and commit
   3. Push to feature branch
@@ -58,6 +57,7 @@ main (🔒 LOCKED - Owner Only)
 
 ### Development Branch (`development`)
 - **Purpose**: Active development work
+...existing code...
 - **Target Audience**: Developers working on new features
 - **Feature Branch Pattern**: `development/feature-*`, `development/bugfix-*`
 - **Merges To**: `main` (via owner approval)

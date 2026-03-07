@@ -1,11 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, ILike, Or } from 'typeorm';
+import { Repository, ILike, Or, DataSource } from 'typeorm';
 import { User } from '../database/entities/users.entity';
 import { Organization } from '../database/entities/organizations.entity';
 import { Role } from '../database/entities/roles.entity';
 import { Chat } from '../database/entities/chats.entity';
 import { Message } from '../database/entities/messages.entity';
+import { CrmLead } from '../database/entities/crm_leads.entity';
+import { CrmClient } from '../database/entities/crm_clients.entity';
+import { CrmInvoice } from '../database/entities/crm_invoices.entity';
+import { Task } from '../database/entities/tasks.entity';
 import { CacheService } from '../common/services/cache.service';
 
 export interface SearchResult {
@@ -34,6 +38,38 @@ export interface SearchResult {
     created_at: Date;
     sender_name: string;
   }>;
+  leads: Array<{
+    id: string;
+    first_name: string;
+    last_name: string | null;
+    email: string | null;
+    company: string | null;
+    status: string;
+  }>;
+  clients: Array<{
+    id: string;
+    name: string;
+    email: string | null;
+    company: string | null;
+  }>;
+  invoices: Array<{
+    id: string;
+    number: number;
+    total: number;
+    status: string;
+    client_id: string;
+  }>;
+  tasks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    priority: string;
+  }>;
+  products: Array<{
+    id: string;
+    name: string;
+    sku: string | null;
+  }>;
 }
 
 @Injectable()
@@ -47,6 +83,15 @@ export class SearchService {
     private chatRepository: Repository<Chat>,
     @InjectRepository(Message)
     private messageRepository: Repository<Message>,
+    @InjectRepository(CrmLead)
+    private leadRepository: Repository<CrmLead>,
+    @InjectRepository(CrmClient)
+    private clientRepository: Repository<CrmClient>,
+    @InjectRepository(CrmInvoice)
+    private crmInvoiceRepository: Repository<CrmInvoice>,
+    @InjectRepository(Task)
+    private taskRepository: Repository<Task>,
+    private dataSource: DataSource,
     private cacheService: CacheService,
   ) {}
 
@@ -59,15 +104,21 @@ export class SearchService {
     limit: number = 20,
   ): Promise<SearchResult> {
     const cacheKey = `search:org:${organizationId}:${query}:${limit}`;
-    
+
     return this.cacheService.getOrSet(cacheKey, async () => {
       const searchTerm = `%${query}%`;
+      const itemLimit = Math.min(limit, 5);
 
-      const [users, roles, chats, messages] = await Promise.all([
-        this.searchUsers(organizationId, searchTerm, limit),
-        this.searchRoles(organizationId, searchTerm, limit),
-        this.searchChats(organizationId, searchTerm, limit),
-        this.searchMessages(organizationId, searchTerm, limit),
+      const [users, roles, chats, messages, leads, clients, invoices, tasks, products] = await Promise.all([
+        this.searchUsers(organizationId, searchTerm, itemLimit),
+        this.searchRoles(organizationId, searchTerm, itemLimit),
+        this.searchChats(organizationId, searchTerm, itemLimit),
+        this.searchMessages(organizationId, searchTerm, itemLimit),
+        this.searchLeads(organizationId, searchTerm, itemLimit),
+        this.searchClients(organizationId, searchTerm, itemLimit),
+        this.searchInvoices(organizationId, searchTerm, itemLimit),
+        this.searchTasks(organizationId, searchTerm, itemLimit),
+        this.searchProducts(organizationId, searchTerm, itemLimit),
       ]);
 
       return {
@@ -75,6 +126,11 @@ export class SearchService {
         roles,
         chats,
         messages,
+        leads,
+        clients,
+        invoices,
+        tasks,
+        products,
       };
     }, 60); // Cache for 1 minute
   }
@@ -206,6 +262,141 @@ export class SearchService {
   }
 
   /**
+   * Search CRM leads in organization
+   */
+  private async searchLeads(
+    organizationId: string,
+    searchTerm: string,
+    limit: number,
+  ) {
+    const results = await this.leadRepository
+      .createQueryBuilder('lead')
+      .where('lead.organizationId = :orgId', { orgId: organizationId })
+      .andWhere(
+        '(lead.first_name ILIKE :term OR lead.last_name ILIKE :term OR lead.email ILIKE :term OR lead.company ILIKE :term)',
+        { term: searchTerm },
+      )
+      .select(['lead.id', 'lead.first_name', 'lead.last_name', 'lead.email', 'lead.company', 'lead.status'])
+      .limit(limit)
+      .getMany();
+
+    return results.map(lead => ({
+      id: lead.id,
+      first_name: lead.first_name,
+      last_name: lead.last_name,
+      email: lead.email,
+      company: lead.company,
+      status: lead.status,
+    }));
+  }
+
+  /**
+   * Search CRM clients in organization
+   */
+  private async searchClients(
+    organizationId: string,
+    searchTerm: string,
+    limit: number,
+  ) {
+    const results = await this.clientRepository
+      .createQueryBuilder('client')
+      .where('client.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('client.removed = false')
+      .andWhere(
+        '(client.name ILIKE :term OR client.email ILIKE :term OR client.company ILIKE :term)',
+        { term: searchTerm },
+      )
+      .select(['client.id', 'client.name', 'client.email', 'client.company'])
+      .limit(limit)
+      .getMany();
+
+    return results.map(client => ({
+      id: client.id,
+      name: client.name,
+      email: client.email,
+      company: client.company,
+    }));
+  }
+
+  /**
+   * Search CRM invoices in organization
+   */
+  private async searchInvoices(
+    organizationId: string,
+    searchTerm: string,
+    limit: number,
+  ) {
+    const results = await this.crmInvoiceRepository
+      .createQueryBuilder('invoice')
+      .where('invoice.organizationId = :orgId', { orgId: organizationId })
+      .andWhere('invoice.removed = false')
+      .andWhere(
+        '(CAST(invoice.number AS TEXT) ILIKE :term OR invoice.notes ILIKE :term)',
+        { term: searchTerm },
+      )
+      .select(['invoice.id', 'invoice.number', 'invoice.total', 'invoice.status', 'invoice.clientId'])
+      .limit(limit)
+      .getMany();
+
+    return results.map(invoice => ({
+      id: invoice.id,
+      number: invoice.number,
+      total: Number(invoice.total),
+      status: invoice.status,
+      client_id: invoice.clientId,
+    }));
+  }
+
+  /**
+   * Search tasks in organization
+   */
+  private async searchTasks(
+    organizationId: string,
+    searchTerm: string,
+    limit: number,
+  ) {
+    const results = await this.taskRepository
+      .createQueryBuilder('task')
+      .where('task.organization_id = :orgId', { orgId: organizationId })
+      .andWhere(
+        '(task.title ILIKE :term OR task.description ILIKE :term)',
+        { term: searchTerm },
+      )
+      .select(['task.id', 'task.title', 'task.status', 'task.priority'])
+      .limit(limit)
+      .getMany();
+
+    return results.map(task => ({
+      id: task.id,
+      title: task.title,
+      status: task.status,
+      priority: task.priority,
+    }));
+  }
+
+  /**
+   * Search inventory products using raw SQL (entity lives outside api/src/)
+   */
+  private async searchProducts(
+    organizationId: string,
+    searchTerm: string,
+    limit: number,
+  ): Promise<Array<{ id: string; name: string; sku: string | null }>> {
+    try {
+      const results = await this.dataSource.query(
+        `SELECT id, name, sku FROM inventory_products
+         WHERE organization_id = $1
+           AND (name ILIKE $2 OR sku ILIKE $2)
+         LIMIT $3`,
+        [organizationId, searchTerm, limit],
+      );
+      return results.map((r: any) => ({ id: r.id, name: r.name, sku: r.sku }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Search messages within a specific chat
    */
   async searchChatMessages(
@@ -248,4 +439,3 @@ export class SearchService {
     }));
   }
 }
-

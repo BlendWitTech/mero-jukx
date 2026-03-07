@@ -102,4 +102,13 @@ export const invoicesApi = {
         const response = await apiClient.post(`/crm/invoices/${id}/restore`);
         return response.data;
     },
+
+    sendEmail: async (id: string, data: { to?: string; subject?: string; message?: string }): Promise<void> => {
+        await apiClient.post(`/crm/invoices/${id}/send-email`, data);
+    },
+
+    sendWhatsApp: async (id: string): Promise<{ success: boolean; error?: string }> => {
+        const response = await apiClient.post(`/crm/invoices/${id}/send-whatsapp`);
+        return response.data;
+    },
 };

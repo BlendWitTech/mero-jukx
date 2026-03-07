@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEnum, IsNumber, IsUUID, IsDateString, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, IsUUID, IsDateString, Min, Max, IsArray } from 'class-validator';
 
 export class CreateDealDto {
     @IsString()
@@ -14,7 +14,15 @@ export class CreateDealDto {
 
     @IsOptional()
     @IsString()
-    stage?: string;
+    stageName?: string;
+
+    @IsOptional()
+    @IsUUID()
+    pipeline_id?: string;
+
+    @IsOptional()
+    @IsUUID()
+    stage_id?: string;
 
     @IsOptional()
     @IsDateString()
@@ -37,6 +45,15 @@ export class CreateDealDto {
     @IsOptional()
     @IsEnum(['OPEN', 'WON', 'LOST'])
     status?: string;
+
+    @IsOptional()
+    @IsString()
+    win_loss_reason?: string;
+
+    @IsOptional()
+    @IsArray()
+    @IsString({ each: true })
+    competitors?: string[];
 }
 
 export class UpdateDealDto extends CreateDealDto { }

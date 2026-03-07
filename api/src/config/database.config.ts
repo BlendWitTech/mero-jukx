@@ -11,7 +11,7 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
     return {
       type: 'postgres',
       host: this.configService.get<string>('DB_HOST', 'localhost'),
-      port: this.configService.get<number>('DB_PORT', 5433),
+      port: this.configService.get<number>('DB_PORT', 5432),
       username: this.configService.get<string>('DB_USER', 'postgres'),
       password: this.configService.get<string>('DB_PASSWORD', 'postgres'),
       database: this.configService.get<string>('DB_NAME', 'mero_jugx'),
@@ -19,7 +19,7 @@ export class DatabaseConfig implements TypeOrmOptionsFactory {
         path.join(__dirname, '../database/entities/**/*.entity{.ts,.js}'),
         path.join(__dirname, '../../marketplace/**/entities/**/*.entity{.ts,.js}')
       ],
-      migrations: [__dirname + '/../database/migrations/[0-9]*-*.ts'],
+      migrations: [__dirname + '/../database/migrations/**/[0-9]*-*.ts'],
       migrationsTableName: 'migrations',
       synchronize: false, // Always false when using migrations to avoid conflicts
       logging: this.configService.get<boolean>('DB_LOGGING', true),

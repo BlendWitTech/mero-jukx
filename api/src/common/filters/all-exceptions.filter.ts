@@ -4,7 +4,7 @@ import { SentryService } from '../services/sentry.service';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
-  constructor(private readonly sentryService?: SentryService) {}
+  constructor(private readonly sentryService?: SentryService) { }
 
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
@@ -68,7 +68,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
       console.error(`💬 Message: ${typeof message === 'string' ? message : (message as any).message || 'Unknown error'}`);
       console.error(`🔴 Error: ${exception instanceof Error ? exception.message : 'Unknown error'}`);
       if (exception instanceof Error && exception.stack) {
-        console.error(`📚 Stack Trace:\n${exception.stack}`);
+        // Log detailed error information for all non-success responses for diagnostics
+        if (status >= 400) {
+          try {
+            const fs = require('fs');
+            const path = require('path');
+            const logDir = path.join(process.cwd(), 'logs');
+            if (!fs.existsSync(logDir)) fs.mkdirSync(logDir);
+            const logFile = path.join(logDir, 'all_errors.log');
+            const logEntry = `[${new Date().toISOString()}] ${request.method} ${request.url} (Status: ${status})\n` +
+              `Error: ${typeof message === 'string' ? message : JSON.stringify(message)}\n` +
+              `Stack: ${(exception as any).stack || 'No stack'}\n` +
+              `Body: ${JSON.stringify(request.body, null, 2)}\n\n`;
+            fs.appendFileSync(logFile, logEntry);
+          } catch (logError) {
+            console.error('Failed to write to all_errors.log:', logError);
+          }
+        }
+
+        console.error(`📚 Stack Trace:\n${(exception as any).stack}`);
       }
       if (request.body && Object.keys(request.body).length > 0) {
         console.error(`📦 Request Body:`, JSON.stringify(request.body, null, 2));

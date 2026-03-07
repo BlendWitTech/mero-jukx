@@ -7,8 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Reflector } from '@nestjs/core';
-import { UserAppAccess } from '../../database/entities/user_app_access.entity';
-import { App } from '../../database/entities/apps.entity';
+import { UserAppAccess, App } from '../../database/entities';
 
 @Injectable()
 export class AppAccessGuard implements CanActivate {

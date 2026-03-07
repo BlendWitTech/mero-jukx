@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useTheme } from '../../contexts/ThemeContext';
 // Import shared components
 import { Button, Input, Card, CardContent, CardHeader } from '@shared';
 
@@ -52,6 +53,7 @@ type ProfileFormData = z.infer<typeof profileSchema>;
 type ChangePasswordFormData = z.infer<typeof changePasswordSchema>;
 
 export default function ProfilePage() {
+  const { theme } = useTheme();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user, setUser, isAuthenticated, accessToken, _hasHydrated, organization } = useAuthStore();
@@ -162,7 +164,7 @@ export default function ProfilePage() {
       const response = await api.get('/users/me/download-data', {
         responseType: 'blob',
       });
-      
+
       // Create download link
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
@@ -172,7 +174,7 @@ export default function ProfilePage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      
+
       toast.success('Account data downloaded successfully');
     } catch (error: any) {
       toast.error(error?.response?.data?.message || 'Failed to download account data');
@@ -257,7 +259,7 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <Card className="animate-pulse">
-        <div className="h-64 bg-[#36393f] rounded"></div>
+        <div className="h-64 rounded" style={{ backgroundColor: theme.colors.surface }}></div>
       </Card>
     );
   }
@@ -269,12 +271,12 @@ export default function ProfilePage() {
     <div className="w-full p-6">
       <div className="mb-6">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#5865f2] rounded-lg">
+          <div className="p-2 rounded-lg" style={{ backgroundColor: theme.colors.primary }}>
             <User className="h-6 w-6 text-white" />
           </div>
           <div>
             <h1 className="text-2xl sm:text-3xl font-bold text-white">Profile</h1>
-            <p className="mt-2 text-sm sm:text-base text-[#b9bbbe]">Manage your account information and preferences</p>
+            <p className="mt-2 text-sm sm:text-base" style={{ color: theme.colors.textSecondary }}>Manage your account information and preferences</p>
           </div>
         </div>
       </div>
@@ -303,11 +305,12 @@ export default function ProfilePage() {
                       <img
                         src={displayUser.avatar_url}
                         alt={`${displayUser.first_name} ${displayUser.last_name}`}
-                        className="h-24 w-24 rounded-full object-cover border-2 border-[#202225]"
+                        className="h-24 w-24 rounded-full object-cover border-2"
+                        style={{ borderColor: theme.colors.border }}
                       />
                     ) : (
-                      <div className="h-24 w-24 rounded-full bg-[#5865f2]/20 flex items-center justify-center border-2 border-[#202225]">
-                        <span className="text-2xl font-semibold text-[#5865f2]">
+                      <div className="h-24 w-24 rounded-full flex items-center justify-center border-2" style={{ backgroundColor: theme.colors.primary + '33', borderColor: theme.colors.border }}>
+                        <span className="text-2xl font-semibold" style={{ color: theme.colors.primary }}>
                           {initials}
                         </span>
                       </div>
@@ -325,7 +328,7 @@ export default function ProfilePage() {
                       error={errors.avatar_url?.message}
                       fullWidth
                     />
-                    <p className="mt-1 text-xs text-[#8e9297]">
+                    <p className="mt-1 text-xs" style={{ color: theme.colors.textSecondary }}>
                       Enter a URL to your profile picture
                     </p>
                   </div>
@@ -370,7 +373,7 @@ export default function ProfilePage() {
                   />
                 </div>
 
-                <div className="flex justify-end space-x-3 pt-4 border-t border-[#202225]">
+                <div className="flex justify-end space-x-3 pt-4 border-t" style={{ borderColor: theme.colors.border }}>
                   <Button
                     type="button"
                     onClick={handleCancel}
@@ -399,18 +402,19 @@ export default function ProfilePage() {
                       <img
                         src={displayUser.avatar_url}
                         alt={`${displayUser.first_name} ${displayUser.last_name}`}
-                        className="h-20 w-20 rounded-full object-cover border-2 border-[#202225]"
+                        className="h-20 w-20 rounded-full object-cover border-2"
+                        style={{ borderColor: theme.colors.border }}
                       />
                     ) : (
-                      <div className="h-20 w-20 rounded-full bg-[#5865f2]/20 flex items-center justify-center border-2 border-[#202225]">
-                        <span className="text-xl font-semibold text-[#5865f2]">
+                      <div className="h-20 w-20 rounded-full flex items-center justify-center border-2" style={{ backgroundColor: theme.colors.primary + '33', borderColor: theme.colors.border }}>
+                        <span className="text-xl font-semibold" style={{ color: theme.colors.primary }}>
                           {initials}
                         </span>
                       </div>
                     )}
                   </div>
                   <div>
-                    <dt className="text-sm font-medium text-[#8e9297]">Name</dt>
+                    <dt className="text-sm font-medium" style={{ color: theme.colors.textSecondary }}>Name</dt>
                     <dd className="mt-1 text-lg font-semibold text-white">
                       {displayUser?.first_name} {displayUser?.last_name}
                     </dd>
@@ -424,12 +428,12 @@ export default function ProfilePage() {
                   </dt>
                   <dd className="text-sm text-white">{displayUser?.email}</dd>
                   {profile?.email_verified ? (
-                    <div className="mt-1 flex items-center text-xs text-[#23a55a]">
+                    <div className="mt-1 flex items-center text-xs" style={{ color: theme.colors.success }}>
                       <CheckCircle2 className="h-3 w-3 mr-1" />
                       Verified
                     </div>
                   ) : (
-                    <div className="mt-1 flex items-center text-xs text-[#faa61a]">
+                    <div className="mt-1 flex items-center text-xs" style={{ color: theme.colors.warning }}>
                       <AlertCircle className="h-3 w-3 mr-1" />
                       Not verified
                     </div>
@@ -438,7 +442,7 @@ export default function ProfilePage() {
 
                 {profile?.phone && (
                   <div>
-                    <dt className="text-sm font-medium text-[#8e9297] flex items-center mb-1">
+                    <dt className="text-sm font-medium flex items-center mb-1" style={{ color: theme.colors.textSecondary }}>
                       <Phone className="h-4 w-4 mr-2" />
                       Phone Number
                     </dt>
@@ -452,7 +456,7 @@ export default function ProfilePage() {
           {/* Security Section */}
           <Card className="mt-6">
             <div className="flex items-center mb-4">
-              <Shield className="h-6 w-6 text-[#5865f2] mr-2" />
+              <Shield className="h-6 w-6 mr-2" style={{ color: theme.colors.primary }} />
               <h2 className="text-lg font-semibold text-white">Security</h2>
             </div>
             <div className="space-y-4">
@@ -461,11 +465,11 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-sm font-medium text-white">Password</p>
-                    <p className="text-sm text-[#8e9297] mt-1">
+                    <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
                       Last changed: {profile?.password_changed_at ? new Date(profile.password_changed_at).toLocaleDateString() : 'Never'}
                     </p>
                   </div>
-                  <Button 
+                  <Button
                     onClick={() => setShowChangePassword(!showChangePassword)}
                     variant="secondary"
                     leftIcon={<Lock className="h-4 w-4" />}
@@ -474,7 +478,7 @@ export default function ProfilePage() {
                   </Button>
                 </div>
                 {showChangePassword && (
-                  <form onSubmit={handlePasswordSubmit(onPasswordSubmit)} className="mt-4 space-y-4 p-4 bg-[#2f3136] rounded-lg">
+                  <form onSubmit={handlePasswordSubmit(onPasswordSubmit)} className="mt-4 space-y-4 p-4 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
                     <div>
                       <Input
                         label="Current Password"
@@ -558,22 +562,22 @@ export default function ProfilePage() {
               </div>
 
               {/* Two-Factor Authentication */}
-              <div className="py-3 border-b border-[#202225]">
+              <div className="py-3 border-b" style={{ borderColor: theme.colors.border }}>
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-sm font-medium text-white">Two-Factor Authentication</p>
-                    <p className="text-sm text-[#8e9297] mt-1">
+                    <div className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
                       {profile?.mfa_enabled ? (
                         <span className="flex items-center">
-                          <CheckCircle2 className="h-4 w-4 text-[#23a55a] mr-1" />
+                          <CheckCircle2 className="h-4 w-4 mr-1" style={{ color: theme.colors.success }} />
                           Enabled
                         </span>
                       ) : (
                         'Not enabled'
                       )}
-                    </p>
+                    </div>
                   </div>
-                  <Button 
+                  <Button
                     onClick={() => {
                       if (profile?.mfa_enabled) {
                         setShowMfaManage(!showMfaManage);
@@ -590,18 +594,18 @@ export default function ProfilePage() {
                   </Button>
                 </div>
                 {showMfaSetup && initializeMfaMutation.data && (
-                  <div className="mt-4 p-4 bg-[#2f3136] rounded-lg">
-                    <p className="text-sm text-[#b9bbbe] mb-4">
+                  <div className="mt-4 p-4 rounded-lg" style={{ backgroundColor: theme.colors.surface }}>
+                    <p className="text-sm mb-4" style={{ color: theme.colors.textSecondary }}>
                       Scan this QR code with your authenticator app (Google Authenticator, Authy, etc.)
                     </p>
                     <div className="flex justify-center mb-4">
-                      <img 
-                        src={initializeMfaMutation.data.qr_code_url} 
-                        alt="MFA QR Code" 
+                      <img
+                        src={initializeMfaMutation.data.qr_code_url}
+                        alt="MFA QR Code"
                         className="w-48 h-48"
                       />
                     </div>
-                    <p className="text-xs text-[#8e9297] mb-4 text-center">
+                    <p className="text-xs mb-4 text-center" style={{ color: theme.colors.textSecondary }}>
                       Secret: {initializeMfaMutation.data.secret}
                     </p>
                     <Button
@@ -615,7 +619,7 @@ export default function ProfilePage() {
                   </div>
                 )}
                 {showMfaManage && profile?.mfa_enabled && (
-                  <div className="mt-4 p-4 bg-[#2f3136] rounded-lg space-y-3">
+                  <div className="mt-4 p-4 rounded-lg space-y-3" style={{ backgroundColor: theme.colors.surface }}>
                     <Button
                       onClick={async () => {
                         try {
@@ -660,11 +664,11 @@ export default function ProfilePage() {
                 <div className="flex items-center justify-between mb-3">
                   <div>
                     <p className="text-sm font-medium text-white">Notification Preferences</p>
-                    <p className="text-sm text-[#8e9297] mt-1">
+                    <p className="text-sm mt-1" style={{ color: theme.colors.textSecondary }}>
                       Manage your personal notification settings
                     </p>
                   </div>
-                  <Button 
+                  <Button
                     onClick={() => setShowNotificationPrefs(!showNotificationPrefs)}
                     variant="secondary"
                     leftIcon={<Bell className="h-4 w-4" />}
@@ -673,17 +677,17 @@ export default function ProfilePage() {
                   </Button>
                 </div>
                 {showNotificationPrefs && (
-                  <div className="mt-4 p-4 bg-[#2f3136] rounded-lg space-y-4">
+                  <div className="mt-4 p-4 rounded-lg space-y-4" style={{ backgroundColor: theme.colors.surface }}>
                     {isLoadingPersonalPrefs ? (
                       <div className="text-center py-4">
-                        <Loader2 className="h-5 w-5 animate-spin text-[#5865f2] mx-auto" />
+                        <Loader2 className="h-5 w-5 animate-spin mx-auto" style={{ color: theme.colors.primary }} />
                       </div>
                     ) : (
                       <>
-                        <div className="flex items-center justify-between pb-3 border-b border-[#202225]">
+                        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: theme.colors.border }}>
                           <div>
                             <p className="text-sm font-medium text-white">Email Notifications</p>
-                            <p className="text-xs text-[#8e9297] mt-1">Master toggle for email notifications</p>
+                            <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>Master toggle for email notifications</p>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
@@ -699,13 +703,13 @@ export default function ProfilePage() {
                               disabled={updatePersonalNotificationPrefsMutation.isPending}
                               className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#5865f2]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2] peer-disabled:opacity-50"></div>
+                            <div className="w-11 h-6 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-4 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--theme-primary)] peer-disabled:opacity-50" style={{ '--tw-ring-color': `${theme.colors.primary}33` } as any}></div>
                           </label>
                         </div>
-                        <div className="flex items-center justify-between pb-3 border-b border-[#202225]">
+                        <div className="flex items-center justify-between pb-3 border-b" style={{ borderColor: theme.colors.border }}>
                           <div>
                             <p className="text-sm font-medium text-white">In-App Notifications</p>
-                            <p className="text-xs text-[#8e9297] mt-1">Master toggle for in-app notifications</p>
+                            <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>Master toggle for in-app notifications</p>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input
@@ -721,19 +725,19 @@ export default function ProfilePage() {
                               disabled={updatePersonalNotificationPrefsMutation.isPending}
                               className="sr-only peer"
                             />
-                            <div className="w-11 h-6 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-[#5865f2]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#5865f2] peer-disabled:opacity-50"></div>
+                            <div className="w-11 h-6 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-4 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--theme-primary)] peer-disabled:opacity-50" style={{ '--tw-ring-color': `${theme.colors.primary}33` } as any}></div>
                           </label>
                         </div>
                         <div className="space-y-3">
-                          <p className="text-xs font-medium text-[#8e9297] uppercase">Notification Types</p>
+                          <p className="text-xs font-medium uppercase" style={{ color: theme.colors.textSecondary }}>Notification Types</p>
                           {['user_invitations', 'role_changes', 'security_alerts'].map((type) => (
-                            <div key={type} className="p-3 bg-[#202225] rounded-lg">
+                            <div key={type} className="p-3 rounded-lg" style={{ backgroundColor: theme.colors.background }}>
                               <p className="text-sm font-medium text-white mb-2 capitalize">
                                 {type.replace('_', ' ')}
                               </p>
                               <div className="grid grid-cols-2 gap-4">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs text-[#b9bbbe]">Email</span>
+                                  <span className="text-xs" style={{ color: theme.colors.textSecondary }}>Email</span>
                                   <label className="relative inline-flex items-center cursor-pointer">
                                     <input
                                       type="checkbox"
@@ -755,11 +759,11 @@ export default function ProfilePage() {
                                       disabled={updatePersonalNotificationPrefsMutation.isPending}
                                       className="sr-only peer"
                                     />
-                                    <div className="w-9 h-5 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#5865f2]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#5865f2] peer-disabled:opacity-50"></div>
+                                    <div className="w-9 h-5 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-2 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-primary)] peer-disabled:opacity-50" style={{ '--tw-ring-color': `${theme.colors.primary}33` } as any}></div>
                                   </label>
                                 </div>
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs text-[#b9bbbe]">In-App</span>
+                                  <span className="text-xs" style={{ color: theme.colors.textSecondary }}>In-App</span>
                                   <label className="relative inline-flex items-center cursor-pointer">
                                     <input
                                       type="checkbox"
@@ -781,7 +785,7 @@ export default function ProfilePage() {
                                       disabled={updatePersonalNotificationPrefsMutation.isPending}
                                       className="sr-only peer"
                                     />
-                                    <div className="w-9 h-5 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-[#5865f2]/20 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#5865f2] peer-disabled:opacity-50"></div>
+                                    <div className="w-9 h-5 bg-[#4f545c] peer-focus:outline-none peer-focus:ring-2 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[var(--theme-primary)] peer-disabled:opacity-50" style={{ '--tw-ring-color': `${theme.colors.primary}33` } as any}></div>
                                   </label>
                                 </div>
                               </div>
@@ -804,22 +808,22 @@ export default function ProfilePage() {
             <h2 className="text-lg font-semibold text-white mb-4">Account Status</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#8e9297]">Status</span>
-                <span className="px-2 py-1 text-xs font-medium bg-[#23a55a]/20 text-[#23a55a] rounded-full">
+                <span className="text-sm" style={{ color: theme.colors.textSecondary }}>Status</span>
+                <span className="px-2 py-1 text-xs font-medium rounded-full" style={{ backgroundColor: theme.colors.success + '33', color: theme.colors.success }}>
                   Active
                 </span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#8e9297]">Email Verified</span>
+                <span className="text-sm" style={{ color: theme.colors.textSecondary }}>Email Verified</span>
                 {profile?.email_verified ? (
-                  <CheckCircle2 className="h-5 w-5 text-[#23a55a]" />
+                  <CheckCircle2 className="h-5 w-5" style={{ color: theme.colors.success }} />
                 ) : (
-                  <AlertCircle className="h-5 w-5 text-[#faa61a]" />
+                  <AlertCircle className="h-5 w-5" style={{ color: theme.colors.warning }} />
                 )}
               </div>
               {profile?.created_at && (
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-[#8e9297]">Member Since</span>
+                  <span className="text-sm" style={{ color: theme.colors.textSecondary }}>Member Since</span>
                   <span className="text-sm text-white">
                     {new Date(profile.created_at).toLocaleDateString()}
                   </span>
@@ -854,9 +858,9 @@ export default function ProfilePage() {
                   Download Account Data
                 </Button>
               )}
-              <Button 
-                variant="danger" 
-                fullWidth 
+              <Button
+                variant="danger"
+                fullWidth
                 className="text-left justify-start"
                 leftIcon={<Trash2 className="h-4 w-4" />}
               >

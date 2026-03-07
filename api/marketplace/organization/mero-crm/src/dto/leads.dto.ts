@@ -43,6 +43,18 @@ export class CreateLeadDto {
     @IsOptional()
     @IsObject()
     custom_fields?: Record<string, any>;
+
+    @IsOptional()
+    @IsNumber()
+    score?: number;
+
+    @IsOptional()
+    @IsString({ each: true })
+    tags?: string[];
+
+    @IsOptional()
+    @IsString()
+    win_loss_reason?: string;
 }
 
 export class UpdateLeadDto extends CreateLeadDto { }

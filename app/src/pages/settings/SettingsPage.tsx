@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
@@ -10,7 +10,6 @@ import { formatLimit } from '../../utils/formatLimit';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useTaskbar } from '../../contexts/TaskbarContext';
 import { Loading } from '@shared';
-import BranchesTab from './BranchesTab';
 
 // Theme Customization Component
 function ThemeCustomizationTab({ organization }: { organization: any }) {
@@ -735,7 +734,12 @@ export default function SettingsPage() {
   const { visibility: taskbarVisibility, setVisibility: setTaskbarVisibility } = useTaskbar();
   const queryClient = useQueryClient();
   const { isAuthenticated, accessToken, _hasHydrated } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'general' | 'theme' | 'branches'>('security');
+  const [activeTab, setActiveTab] = useState<'security' | 'notifications' | 'general' | 'theme' | 'compliance'>('security');
+  const [panNumber, setPanNumber] = useState('');
+  const [vatNumber, setVatNumber] = useState('');
+  const [ipWhitelist, setIpWhitelist] = useState('');
+  const [isSavingTax, setIsSavingTax] = useState(false);
+  const [isSavingIp, setIsSavingIp] = useState(false);
 
   const { data: organization, isLoading: isLoadingOrg } = useQuery({
     queryKey: ['organization'],
@@ -756,6 +760,15 @@ export default function SettingsPage() {
   });
 
   const isOrganizationOwner = organization?.current_user_role?.is_organization_owner || false;
+
+  // Pre-populate compliance fields from org data
+  useEffect(() => {
+    if (organization) {
+      setPanNumber(organization.pan_number || '');
+      setVatNumber(organization.vat_number || '');
+      setIpWhitelist((organization.ip_whitelist || []).join('\n'));
+    }
+  }, [organization]);
 
   const { data: notificationPreferences, isLoading: isLoadingPrefs } = useQuery({
     queryKey: ['notification-preferences', 'organization'],
@@ -953,31 +966,29 @@ export default function SettingsPage() {
             <Palette className="h-4 w-4 flex-shrink-0" />
             <span className="font-medium text-sm">Theme</span>
           </button>
-          {isOrganizationOwner && organization?.org_type === 'MAIN' && (
-            <button
-              onClick={() => setActiveTab('branches')}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 whitespace-nowrap"
-              style={activeTab === 'branches'
-                ? { backgroundColor: theme.colors.surface, color: theme.colors.text, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }
-                : { color: theme.colors.textSecondary }
+          <button
+            onClick={() => setActiveTab('compliance')}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 whitespace-nowrap"
+            style={activeTab === 'compliance'
+              ? { backgroundColor: theme.colors.surface, color: theme.colors.text, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }
+              : { color: theme.colors.textSecondary }
+            }
+            onMouseEnter={(e) => {
+              if (activeTab !== 'compliance') {
+                e.currentTarget.style.backgroundColor = theme.colors.surface;
+                e.currentTarget.style.color = theme.colors.text;
               }
-              onMouseEnter={(e) => {
-                if (activeTab !== 'branches') {
-                  e.currentTarget.style.backgroundColor = theme.colors.surface;
-                  e.currentTarget.style.color = theme.colors.text;
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (activeTab !== 'branches') {
-                  e.currentTarget.style.backgroundColor = 'transparent';
-                  e.currentTarget.style.color = theme.colors.textSecondary;
-                }
-              }}
-            >
-              <Building2 className="h-4 w-4 flex-shrink-0" />
-              <span className="font-medium text-sm">Branches</span>
-            </button>
-          )}
+            }}
+            onMouseLeave={(e) => {
+              if (activeTab !== 'compliance') {
+                e.currentTarget.style.backgroundColor = 'transparent';
+                e.currentTarget.style.color = theme.colors.textSecondary;
+              }
+            }}
+          >
+            <Shield className="h-4 w-4 flex-shrink-0" />
+            <span className="font-medium text-sm">Compliance</span>
+          </button>
         </div>
       </div>
 
@@ -1741,15 +1752,108 @@ export default function SettingsPage() {
             <ThemeCustomizationTab organization={organization} />
           )}
 
-          {/* Branches Tab */}
-          {activeTab === 'branches' && isOrganizationOwner && organization?.org_type === 'MAIN' && (
-            <BranchesTab
-              organization={organization}
-              stats={stats}
-              onSwitchOrganization={(id) => switchOrganizationMutation.mutate(id)}
-              isSwitching={switchOrganizationMutation.isPending}
-            />
+          {/* Compliance Tab */}
+          {activeTab === 'compliance' && (
+            <div className="space-y-6 max-w-2xl">
+              {/* Tax & Compliance */}
+              <div className="rounded-xl p-6" style={{ backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
+                <h3 className="text-lg font-semibold mb-1" style={{ color: theme.colors.text }}>Tax & Compliance</h3>
+                <p className="text-sm mb-4" style={{ color: theme.colors.textSecondary }}>Nepal-specific tax registration numbers (9 digits each).</p>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>PAN Number</label>
+                    <input
+                      type="text"
+                      value={panNumber}
+                      onChange={(e) => setPanNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="9-digit PAN number"
+                      maxLength={9}
+                      className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }}
+                    />
+                    {panNumber && panNumber.length !== 9 && (
+                      <p className="text-xs mt-1" style={{ color: '#dc2626' }}>PAN must be exactly 9 digits</p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>VAT Number</label>
+                    <input
+                      type="text"
+                      value={vatNumber}
+                      onChange={(e) => setVatNumber(e.target.value.replace(/\D/g, '').slice(0, 9))}
+                      placeholder="9-digit VAT number"
+                      maxLength={9}
+                      className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                      style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }}
+                    />
+                    {vatNumber && vatNumber.length !== 9 && (
+                      <p className="text-xs mt-1" style={{ color: '#dc2626' }}>VAT must be exactly 9 digits</p>
+                    )}
+                  </div>
+                  <button
+                    disabled={isSavingTax || (!!panNumber && panNumber.length !== 9) || (!!vatNumber && vatNumber.length !== 9)}
+                    onClick={async () => {
+                      setIsSavingTax(true);
+                      try {
+                        await api.put('/organizations/me/tax-info', { pan_number: panNumber || undefined, vat_number: vatNumber || undefined });
+                        toast.success('Tax info saved');
+                      } catch {
+                        toast.error('Failed to save tax info');
+                      } finally {
+                        setIsSavingTax(false);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                    style={{ backgroundColor: theme.colors.primary }}
+                  >
+                    {isSavingTax ? 'Saving...' : 'Save Tax Info'}
+                  </button>
+                </div>
+              </div>
+
+              {/* IP Whitelist */}
+              <div className="rounded-xl p-6" style={{ backgroundColor: theme.colors.surface, border: `1px solid ${theme.colors.border}` }}>
+                <h3 className="text-lg font-semibold mb-1" style={{ color: theme.colors.text }}>IP Whitelist</h3>
+                <p className="text-sm mb-4" style={{ color: theme.colors.textSecondary }}>
+                  Restrict access to your organization to specific IP addresses. Leave empty to allow all IPs.
+                </p>
+                <div>
+                  <label className="block text-sm font-medium mb-1" style={{ color: theme.colors.text }}>Allowed IP Addresses (one per line)</label>
+                  <textarea
+                    value={ipWhitelist}
+                    onChange={(e) => setIpWhitelist(e.target.value)}
+                    placeholder={'192.168.1.1\n10.0.0.1\n2001:db8::1'}
+                    rows={6}
+                    className="w-full px-3 py-2 rounded-lg text-sm font-mono focus:outline-none resize-y"
+                    style={{ backgroundColor: theme.colors.background, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }}
+                  />
+                  <p className="text-xs mt-1" style={{ color: theme.colors.textSecondary }}>
+                    Supports IPv4 and IPv6 addresses. Current requests come from your browser's IP.
+                  </p>
+                </div>
+                <button
+                  disabled={isSavingIp}
+                  onClick={async () => {
+                    setIsSavingIp(true);
+                    try {
+                      const ips = ipWhitelist.split('\n').map((s) => s.trim()).filter(Boolean);
+                      await api.put('/organizations/me/ip-whitelist', { ips });
+                      toast.success('IP whitelist saved');
+                    } catch {
+                      toast.error('Failed to save IP whitelist');
+                    } finally {
+                      setIsSavingIp(false);
+                    }
+                  }}
+                  className="mt-4 px-4 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+                  style={{ backgroundColor: theme.colors.primary }}
+                >
+                  {isSavingIp ? 'Saving...' : 'Save IP Whitelist'}
+                </button>
+              </div>
+            </div>
           )}
+
         </div>
       </div>
     </div>

@@ -3,51 +3,32 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, CardContent, Loading, Modal, Input } from '@shared/frontend';
 import api from '@frontend/services/api';
-import { ArrowLeft, Plus, Settings } from 'lucide-react';
+import { ArrowLeft, Plus, Settings, Globe, Lock, Users as UsersIcon } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 import { useTheme } from '@frontend/contexts/ThemeContext';
+import { useAuthStore } from '@frontend/store/authStore';
 import toast from '@shared/frontend/hooks/useToast';
-import TicketKanban from '../components/TicketKanban';
-import { Ticket } from '@frontend/types/tickets';
-
-interface BoardColumn {
-    id: string;
-    name: string;
-    position: number;
-    color: string;
-    wip_limit: number | null;
-    tickets: Ticket[];
-}
-
-interface Board {
-    id: string;
-    name: string;
-    description: string;
-    type: string;
-    color: string;
-    columns?: BoardColumn[];
-}
+import TaskKanban from '../components/TaskKanban';
+import { Board } from '../types';
+import { useBoardSocket } from '../hooks/useBoardSocket';
 
 export default function BoardDetailPage() {
     const { boardId } = useParams<{ boardId: string }>();
+    useBoardSocket(boardId);
     const navigate = useNavigate();
     const queryClient = useQueryClient();
     const { appSlug } = useAppContext();
     const { theme } = useTheme();
+    const { organization } = useAuthStore();
 
     const [showAddColumnModal, setShowAddColumnModal] = useState(false);
     const [columnForm, setColumnForm] = useState({ name: '', wip_limit: '' });
 
     // Fetch board details with columns and tickets
-    // Note: Backend endpoint /boards/:id should return columns join
-    // And we might need a separate call for columns if not included
     const { data: boardData, isLoading } = useQuery<{ data: Board }>({
         queryKey: ['board', appSlug, boardId],
         queryFn: async () => {
-            // Assuming GET /boards/:id returns columns with tickets populated
-            // If not, we need to fetch /boards/:id/columns
             const response = await api.get(`/boards/${boardId}`);
-            // Also fetch columns if not in response, but for now assume it returns them or we fetch them separate
             const columnsResponse = await api.get(`/boards/${boardId}/columns`);
             return { data: { ...response.data, columns: columnsResponse.data } };
         },
@@ -77,23 +58,73 @@ export default function BoardDetailPage() {
         },
     });
 
-    // Handle Ticket Move
-    const moveTicketMutation = useMutation({
-        mutationFn: async ({ ticketId, targetColumnId, newPosition }: { ticketId: string, targetColumnId: string, newPosition: number }) => {
-            // Need an endpoint to move ticket. 
-            // We added moveTicket to TicketsService, but need a controller endpoint.
-            // Or update ticket directly: PATCH /tickets/:id { board_id, column_id, position }
-            // Let's assume PUT /tickets/:id exists.
-            return api.put(`/tickets/${ticketId}`, { column_id: targetColumnId, position: newPosition, board_id: boardId });
+    // Handle Task Move
+    const moveTaskMutation = useMutation({
+        mutationFn: async ({ taskId, targetColumnId, newPosition }: { taskId: string, targetColumnId: string, newPosition: number }) => {
+            return api.put(`/tasks/${taskId}/move`, { column_id: targetColumnId, sort_order: newPosition });
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['board', appSlug, boardId] });
         },
         onError: (error: any) => {
-            toast.error('Failed to move ticket');
+            toast.error('Failed to move task');
         }
     });
 
+    const moveColumnMutation = useMutation({
+        mutationFn: async ({ columnId, newPosition }: { columnId: string, newPosition: number }) => {
+            return api.put(`/boards/${boardId}/columns/reorder`, { columnId, newPosition });
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['board', appSlug, boardId] });
+            toast.success('Column reordered');
+        },
+        onError: (error: any) => {
+            toast.error('Failed to reorder columns');
+        }
+    });
+
+    const updateColumnMutation = useMutation({
+        mutationFn: async ({ columnId, data }: { columnId: string, data: any }) => {
+            return api.patch(`/columns/${columnId}`, data);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['board', appSlug, boardId] });
+            toast.success('Column updated');
+        },
+        onError: (error: any) => {
+            toast.error('Failed to update column');
+        }
+    });
+
+    const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+    const [activeColumnId, setActiveColumnId] = useState<string | null>(null);
+    const [taskForm, setTaskForm] = useState({ subject: '' });
+
+    // Add Task Mutation
+    const addTaskMutation = useMutation({
+        mutationFn: async (data: { subject: string; column_id: string }) => {
+            const response = await api.post('/tasks', {
+                ...data,
+                board_id: boardId,
+                status: 'todo',
+                priority: 'medium',
+                organization_id: organization?.id
+            });
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['board', appSlug, boardId] });
+            setShowAddTaskModal(false);
+            setTaskForm({ subject: '' });
+            toast.success('Task added');
+        },
+    });
+
+    const handleAddTask = (columnId: string) => {
+        setActiveColumnId(columnId);
+        setShowAddTaskModal(true);
+    };
 
     if (isLoading) {
         return (
@@ -123,6 +154,14 @@ export default function BoardDetailPage() {
                             <span className="text-sm font-normal px-2 py-0.5 rounded border" style={{ color: theme.colors.textSecondary, borderColor: theme.colors.border }}>
                                 {board.type}
                             </span>
+                            {board.visibility && (
+                                <span className="flex items-center gap-1 text-sm font-normal px-2 py-0.5 rounded border" title={`Visibility: ${board.visibility}`} style={{ color: theme.colors.textSecondary, borderColor: theme.colors.border }}>
+                                    {board.visibility === 'PRIVATE' ? <Lock className="h-3 w-3" /> :
+                                        board.visibility === 'PUBLIC' ? <Globe className="h-3 w-3" /> :
+                                            <UsersIcon className="h-3 w-3" />}
+                                    <span className="capitalize">{board.visibility.toLowerCase()}</span>
+                                </span>
+                            )}
                         </h1>
                         {board.description && <p style={{ color: theme.colors.textSecondary }}>{board.description}</p>}
                     </div>
@@ -143,12 +182,45 @@ export default function BoardDetailPage() {
 
             {/* Board Content */}
             <div className="flex-1 overflow-x-auto overflow-y-hidden">
-                <TicketKanban
+                <TaskKanban
                     columns={board.columns || []}
-                    onTicketMove={(ticketId, columnId, index) => moveTicketMutation.mutate({ ticketId, targetColumnId: columnId, newPosition: index })}
-                    onTicketClick={(ticketId) => navigate(`../../tasks/${ticketId}`, { relative: 'path' })}
+                    onTaskMove={(taskId, columnId, index) => moveTaskMutation.mutate({ taskId, targetColumnId: columnId, newPosition: index })}
+                    onColumnMove={(columnId, index) => moveColumnMutation.mutate({ columnId, newPosition: index })}
+                    onTaskClick={(taskId) => navigate(`../../tasks/${taskId}`, { relative: 'path' })}
+                    onAddTaskClick={handleAddTask}
+                    onUpdateWipLimit={(columnId, limit) => updateColumnMutation.mutate({ columnId, data: { wip_limit: limit } })}
                 />
             </div>
+
+            {/* Add Task Modal */}
+            <Modal
+                isOpen={showAddTaskModal}
+                onClose={() => setShowAddTaskModal(false)}
+                title="Quick Add Task"
+                theme={theme}
+            >
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Task Subject</label>
+                        <Input
+                            value={taskForm.subject}
+                            onChange={e => setTaskForm({ ...taskForm, subject: e.target.value })}
+                            placeholder="What needs to be done?"
+                            autoFocus
+                        />
+                    </div>
+                    <div className="flex justify-end gap-2 mt-4">
+                        <Button variant="outline" onClick={() => setShowAddTaskModal(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => addTaskMutation.mutate({ subject: taskForm.subject, column_id: activeColumnId! })}
+                            disabled={!taskForm.subject || addTaskMutation.isPending}
+                            isLoading={addTaskMutation.isPending}
+                        >
+                            Create Task
+                        </Button>
+                    </div>
+                </div>
+            </Modal>
 
             {/* Add Column Modal */}
             <Modal

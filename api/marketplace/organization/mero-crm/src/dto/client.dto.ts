@@ -1,5 +1,7 @@
-import { IsString, IsEmail, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsBoolean, IsEnum, IsArray, IsObject, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { CreateContactDto } from './contact.dto';
 
 export class CreateClientDto {
     @ApiProperty({ example: 'Acme Corporation' })
@@ -55,6 +57,29 @@ export class CreateClientDto {
     @IsString()
     @IsOptional()
     assignedToId?: string;
+
+    @ApiPropertyOptional({ enum: ['LEAD', 'CUSTOMER', 'VENDOR', 'PARTNER'] })
+    @IsEnum(['LEAD', 'CUSTOMER', 'VENDOR', 'PARTNER'])
+    @IsOptional()
+    category?: string;
+
+    @ApiPropertyOptional({ type: [String] })
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    tags?: string[];
+
+    @ApiPropertyOptional()
+    @IsObject()
+    @IsOptional()
+    customFields?: Record<string, any>;
+
+    @ApiPropertyOptional({ type: [CreateContactDto] })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateContactDto)
+    @IsOptional()
+    contacts?: CreateContactDto[];
 }
 
 export class UpdateClientDto {
@@ -117,4 +142,27 @@ export class UpdateClientDto {
     @IsBoolean()
     @IsOptional()
     enabled?: boolean;
+
+    @ApiPropertyOptional({ enum: ['LEAD', 'CUSTOMER', 'VENDOR', 'PARTNER'] })
+    @IsEnum(['LEAD', 'CUSTOMER', 'VENDOR', 'PARTNER'])
+    @IsOptional()
+    category?: string;
+
+    @ApiPropertyOptional({ type: [String] })
+    @IsArray()
+    @IsString({ each: true })
+    @IsOptional()
+    tags?: string[];
+
+    @ApiPropertyOptional()
+    @IsObject()
+    @IsOptional()
+    customFields?: Record<string, any>;
+
+    @ApiPropertyOptional({ type: [CreateContactDto] })
+    @IsArray()
+    @ValidateNested({ each: true })
+    @Type(() => CreateContactDto)
+    @IsOptional()
+    contacts?: CreateContactDto[];
 }

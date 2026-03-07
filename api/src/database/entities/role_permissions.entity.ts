@@ -13,14 +13,13 @@ import { Permission } from './permissions.entity';
 
 @Entity('role_permissions')
 @Unique(['role_id', 'permission_id'])
-@Index(['role_id'])
-@Index(['permission_id'])
+@Index('IDX_ROLE_PERMS_ROLE_ID', ['role_id'])
+@Index('IDX_ROLE_PERMS_PERM_ID', ['permission_id'])
 export class RolePermission {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column({ type: 'int' })
-  @Index()
   role_id: number;
 
   @ManyToOne(() => Role, { onDelete: 'CASCADE' })
@@ -28,7 +27,6 @@ export class RolePermission {
   role: Role;
 
   @Column({ type: 'int' })
-  @Index()
   permission_id: number;
 
   @ManyToOne(() => Permission, { onDelete: 'CASCADE' })

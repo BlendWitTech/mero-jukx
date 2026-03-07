@@ -78,6 +78,9 @@ export default function PaymentSuccessPage() {
     [searchParams]
   );
 
+  // Get return path from localStorage
+  const returnPath = useMemo(() => localStorage.getItem('payment_return_path') || '/packages', []);
+
   const verifyPaymentMutation = useMutation({
     mutationFn: async (data: { transactionId: string; refId?: string; sessionId?: string }) => {
       const response = await api.post('/payments/verify', data);
@@ -90,44 +93,52 @@ export default function PaymentSuccessPage() {
 
         // Check if there was a post-payment error first
         if (data.post_payment_error) {
-          toast.error(`Payment verified but upgrade failed: ${data.post_payment_error}`, { duration: 6000 });
+          toast.error(`Payment verified but activation failed: ${data.post_payment_error}`, { duration: 6000 });
         } else {
           // Show success message only once
-          toast.success('Payment verified successfully! Package/feature will be activated shortly.');
+          toast.success('Payment verified successfully! Your subscription/upgrade will be active shortly.');
         }
 
-        // Aggressively invalidate ALL package-related queries across the entire application
-        // This ensures package data is refreshed everywhere (Dashboard, Roles, Organizations, Packages pages)
-        console.log('Invalidating all package-related queries...');
+        // Aggressively invalidate package and app related queries across the entire application
+        console.log('Invalidating all related queries...');
 
-        // Invalidate all queries that contain 'package' in their key
+        // Invalidate all queries that contain 'package' or 'app' in their key
         await Promise.all([
           queryClient.invalidateQueries({
             predicate: (query) => {
               const key = query.queryKey;
               return Array.isArray(key) && (
                 key.some(k => typeof k === 'string' && k.toLowerCase().includes('package')) ||
-                key.some(k => typeof k === 'string' && k.toLowerCase().includes('current-package'))
+                key.some(k => typeof k === 'string' && k.toLowerCase().includes('current-package')) ||
+                key.some(k => typeof k === 'string' && k.toLowerCase().includes('app'))
               );
             }
           }),
-          // Also invalidate organization queries as they might contain package info
+          // Also invalidate organization queries as they might contain package or app info
           queryClient.invalidateQueries({ queryKey: ['organizations'], exact: false }),
           queryClient.invalidateQueries({ queryKey: ['organization'], exact: false }),
+          queryClient.invalidateQueries({ queryKey: ['organization-apps'], exact: false }),
+          queryClient.invalidateQueries({ queryKey: ['apps'], exact: false }),
+          queryClient.invalidateQueries({ queryKey: ['app-access'], exact: false }),
         ]);
 
-        // Wait for backend to complete the upgrade
+        // Clear return path after successful verification use
+        localStorage.removeItem('payment_return_path');
+
+        // Wait for backend to complete the upgrade/activation
         await new Promise(resolve => setTimeout(resolve, 1000));
 
-        // Refetch all package-related queries
-        console.log('Refetching all package-related queries...');
+        // Refetch related queries
+        console.log('Refetching all related queries...');
         await Promise.all([
           queryClient.refetchQueries({
             predicate: (query) => {
               const key = query.queryKey;
               return Array.isArray(key) && (
-                key.some(k => typeof k === 'string' && k.toLowerCase().includes('package')) ||
-                key.some(k => typeof k === 'string' && k.toLowerCase().includes('current-package'))
+                key.some(k => typeof k === 'string' && (
+                  k.toLowerCase().includes('package') ||
+                  k.toLowerCase().includes('app')
+                ))
               );
             }
           }),
@@ -136,6 +147,7 @@ export default function PaymentSuccessPage() {
         // Wait a bit more and refetch again to ensure we have the latest data
         await new Promise(resolve => setTimeout(resolve, 500));
         await queryClient.refetchQueries({ queryKey: ['current-package'], exact: false });
+        await queryClient.refetchQueries({ queryKey: ['organization-apps'], exact: false });
 
         // Dispatch a custom event to notify all components about package update
         window.dispatchEvent(new CustomEvent('package-updated', {
@@ -143,25 +155,27 @@ export default function PaymentSuccessPage() {
         }));
 
         setTimeout(() => {
-          // Navigate and force a refetch on the packages page
-          navigate('/packages', { replace: true });
+          // Navigate to the return path
+          navigate(returnPath, { replace: true });
           // Trigger another comprehensive refetch after navigation
           setTimeout(() => {
             queryClient.invalidateQueries({
               predicate: (query) => {
                 const key = query.queryKey;
                 return Array.isArray(key) && (
-                  key.some(k => typeof k === 'string' && k.toLowerCase().includes('package'))
+                  key.some(k => typeof k === 'string' && k.toLowerCase().includes('package')) ||
+                  key.some(k => typeof k === 'string' && k.toLowerCase().includes('app'))
                 );
               }
             });
             queryClient.refetchQueries({ queryKey: ['current-package'], exact: false });
+            queryClient.refetchQueries({ queryKey: ['organization-apps'], exact: false });
           }, 500);
         }, 1500);
       } else {
         toast.error(data.message || 'Payment verification failed');
         setTimeout(() => {
-          navigate('/packages');
+          navigate(returnPath);
         }, 3000);
       }
     },
@@ -175,7 +189,7 @@ export default function PaymentSuccessPage() {
       console.error('Error response:', error.response?.data);
       toast.error(errorMessage, { duration: 5000 });
       setTimeout(() => {
-        navigate('/packages');
+        navigate(returnPath);
       }, 4000);
     },
   });
@@ -206,7 +220,7 @@ export default function PaymentSuccessPage() {
         { duration: 6000, id: 'esewa-token-error' } as any
       );
       const timeoutId = setTimeout(() => {
-        navigate('/packages');
+        navigate(returnPath);
       }, 4000);
       return () => clearTimeout(timeoutId);
     }

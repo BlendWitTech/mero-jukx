@@ -44,6 +44,12 @@ export class LeadsController {
         return this.leadsService.findAll(req.user.organizationId);
     }
 
+    @Get('stats/forecast')
+    @Permissions('crm.leads.view')
+    getForecast(@Request() req) {
+        return this.leadsService.getForecast(req.user.organizationId);
+    }
+
     @Get(':id')
     @Permissions('crm.leads.view')
     findOne(@Param('id') id: string, @Request() req) {
@@ -56,9 +62,15 @@ export class LeadsController {
         return this.leadsService.update(id, updateLeadDto, req.user.organizationId);
     }
 
-    @Delete(':id')
-    @Permissions('crm.leads.delete')
-    remove(@Param('id') id: string, @Request() req) {
-        return this.leadsService.remove(id, req.user.organizationId);
+    @Post(':id/convert')
+    @Permissions('crm.leads.update')
+    convert(@Param('id') id: string, @Request() req) {
+        return this.leadsService.convert(id, req.user.organizationId);
+    }
+
+    @Post('bulk')
+    @Permissions('crm.leads.create')
+    bulkCreate(@Body() leads: CreateLeadDto[], @Request() req) {
+        return this.leadsService.bulkCreate(leads, req.user.organizationId);
     }
 }

@@ -18,7 +18,7 @@ import {
 import { SearchBar } from '@shared/frontend/components/data-display/SearchBar';
 import { EmptyState } from '@shared/frontend/components/feedback/EmptyState';
 import api from '@frontend/services/api';
-import { ArrowLeft, Plus, CheckSquare, Filter, X, Calendar as CalendarIcon, Tag, SortAsc, Grid3x3, List, Bookmark, BookmarkCheck, GanttChart } from 'lucide-react';
+import { ArrowLeft, Plus, CheckSquare, Filter, X, Calendar as CalendarIcon, SortAsc, Grid3x3, List, Bookmark, GanttChart, Download, Upload, FileSpreadsheet, FileText } from 'lucide-react';
 import TaskKanban from '../components/TaskKanban';
 import TaskGantt from '../components/TaskGantt';
 import TaskCalendar from '../components/TaskCalendar';
@@ -422,6 +422,128 @@ export default function TasksPage() {
     toast.success(`Applied filter: ${preset.name}`);
   };
 
+  const exportToCSV = () => {
+    if (!tasks || tasks.length === 0) { toast.error('No tasks to export'); return; }
+    const headers = ['Title', 'Status', 'Priority', 'Assignee', 'Due Date', 'Tags'];
+    const rows = tasks.map((t) => [
+      `"${t.title.replace(/"/g, '""')}"`,
+      t.status,
+      t.priority,
+      t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '',
+      t.due_date ? new Date(t.due_date).toLocaleDateString() : '',
+      (t.tags || []).join(';'),
+    ]);
+    const csv = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tasks-${projectId}-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Tasks exported to CSV');
+  };
+
+  const exportToExcel = () => {
+    if (!tasks || tasks.length === 0) { toast.error('No tasks to export'); return; }
+    // SpreadsheetML format — opens natively in Excel, no library needed
+    const esc = (v: string) => v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const row = (cells: string[]) =>
+      `<Row>${cells.map((c) => `<Cell><Data ss:Type="String">${esc(c)}</Data></Cell>`).join('')}</Row>`;
+    const headers = ['Title', 'Status', 'Priority', 'Assignee', 'Due Date', 'Tags', 'Created At'];
+    const dataRows = tasks.map((t) =>
+      row([
+        t.title,
+        t.status,
+        t.priority,
+        t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '',
+        t.due_date ? new Date(t.due_date).toLocaleDateString() : '',
+        (t.tags || []).join(', '),
+        new Date(t.created_at).toLocaleDateString(),
+      ])
+    );
+    const xml = `<?xml version="1.0"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Tasks">
+<Table>
+${row(headers)}
+${dataRows.join('\n')}
+</Table>
+</Worksheet>
+</Workbook>`;
+    const blob = new Blob([xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tasks-${projectId}-${new Date().toISOString().split('T')[0]}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Tasks exported to Excel');
+  };
+
+  const exportToPDF = () => {
+    if (!tasks || tasks.length === 0) { toast.error('No tasks to export'); return; }
+    const dateStr = new Date().toLocaleDateString();
+    const rows = tasks.map((t) => `
+      <tr>
+        <td>${t.title.replace(/</g, '&lt;')}</td>
+        <td>${t.status.replace('_', ' ')}</td>
+        <td>${t.priority}</td>
+        <td>${t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : '—'}</td>
+        <td>${t.due_date ? new Date(t.due_date).toLocaleDateString() : '—'}</td>
+        <td>${(t.tags || []).join(', ') || '—'}</td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Tasks Export</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; margin: 20px; }
+  h1 { font-size: 18px; margin-bottom: 4px; }
+  p { color: #666; margin-bottom: 16px; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #1e293b; color: white; padding: 8px; text-align: left; }
+  td { padding: 7px 8px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) td { background: #f8fafc; }
+</style></head><body>
+<h1>Task Report</h1><p>Project: ${projectId} &nbsp;·&nbsp; Exported: ${dateStr} &nbsp;·&nbsp; Total: ${tasks.length} tasks</p>
+<table><thead><tr><th>Title</th><th>Status</th><th>Priority</th><th>Assignee</th><th>Due Date</th><th>Tags</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(html);
+      win.document.close();
+      win.focus();
+      setTimeout(() => { win.print(); }, 500);
+    }
+    toast.success('PDF print dialog opened');
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const text = ev.target?.result as string;
+      const lines = text.trim().split('\n').slice(1); // skip header
+      let imported = 0;
+      for (const line of lines) {
+        const cols = line.split(',');
+        const title = cols[0]?.replace(/^"|"$/g, '').trim();
+        const status = cols[1]?.trim() || 'todo';
+        const priority = cols[2]?.trim() || 'medium';
+        if (!title) continue;
+        try {
+          await createTaskMutation.mutateAsync({ title, status, priority });
+          imported++;
+        } catch { }
+      }
+      toast.success(`Imported ${imported} tasks from CSV`);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  };
+
   const hasActiveFilters = filters.status || filters.priority || filters.assigneeId || filters.search || filters.dueDate || filters.tags.length > 0;
 
   if (!projectId) {
@@ -569,6 +691,27 @@ export default function TasksPage() {
               <Plus className="mr-2 h-4 w-4" />
               Create Task
             </Button>
+            <Button variant="outline" onClick={exportToCSV} title="Export to CSV">
+              <Download className="mr-2 h-4 w-4" />
+              CSV
+            </Button>
+            <Button variant="outline" onClick={exportToExcel} title="Export to Excel">
+              <FileSpreadsheet className="mr-2 h-4 w-4" />
+              Excel
+            </Button>
+            <Button variant="outline" onClick={exportToPDF} title="Export to PDF">
+              <FileText className="mr-2 h-4 w-4" />
+              PDF
+            </Button>
+            <label className="cursor-pointer">
+              <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
+              <span
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors"
+                style={{ borderColor: theme.colors.border, color: theme.colors.text, backgroundColor: theme.colors.surface }}
+              >
+                <Upload className="h-4 w-4 mr-1" /> Import CSV
+              </span>
+            </label>
           </div>
         </div>
       </div>
@@ -718,10 +861,11 @@ export default function TasksPage() {
           />
         </div>
       ) : viewMode === 'gantt' ? (
-        <div className="h-[calc(100vh-400px)]">
+        <div className="h-[calc(100vh-260px)]">
           <TaskGantt
             tasks={tasks || []}
             onTaskClick={(taskId) => navigate(`${taskId}`, { relative: 'route' })}
+            onTaskUpdate={(taskId, data) => updateTaskMutation.mutate({ taskId, data })}
           />
         </div>
       ) : viewMode === 'calendar' ? (

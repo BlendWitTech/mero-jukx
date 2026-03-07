@@ -40,11 +40,19 @@ echo ""
 echo "Starting complete reset..."
 echo ""
 
-# Step 1: Stop Docker containers
-echo "[1/9] Stopping Docker containers..."
-if command -v docker-compose &> /dev/null || command -v docker &> /dev/null; then
+# Step 1: Stop and remove Docker containers
+echo "[1/9] Stopping and removing Docker containers..."
+if command -v docker &> /dev/null; then
+    # Force remove all containers matching "mero"
+    CONTAINERS=$(docker ps -a --format "{{.Names}}" | grep "mero" || true)
+    if [ ! -z "$CONTAINERS" ]; then
+        echo "  Forcing removal of mero-related containers..."
+        for container in $CONTAINERS; do
+            docker rm -f "$container" 2>/dev/null || true
+        done
+    fi
     docker-compose down 2>/dev/null || docker compose down 2>/dev/null || true
-    echo "  ✓ Docker containers stopped"
+    echo "  ✓ Docker containers stopped and removed"
 else
     echo "  ⚠ Docker not found, skipping"
 fi
@@ -110,11 +118,12 @@ echo "[3/9] Removing build artifacts..."
 echo ""
 
 # Step 4: Clear logs
-echo "[4/9] Clearing logs..."
-[ -d "logs" ] && rm -rf logs/* && echo "  ✓ Logs cleared"
-[ -f "error-log.txt" ] && > error-log.txt && echo "  ✓ Error log cleared"
-[ -f "startup-log.txt" ] && > startup-log.txt && echo "  ✓ Startup log cleared"
-[ -f "frontend-errors.log" ] && > frontend-errors.log && echo "  ✓ Frontend error log cleared"
+echo "[4/9] Clearing logs and temporary files..."
+[ -d "logs" ] && rm -rf logs/* && echo "  ✓ logs/ cleared"
+LOG_FILES=("error-log.txt" "startup-log.txt" "frontend-errors.log" "db_error.txt" "db_init_debug.log" "db_init_final.log" "db_init_output.txt" "docker_ps.txt" "docker_vols.txt" "final_error.log" "error_extract.txt")
+for file in "${LOG_FILES[@]}"; do
+    [ -f "$file" ] && rm -f "$file" && echo "  ✓ $file removed"
+done
 echo ""
 
 # Step 5: Clear cache
@@ -141,63 +150,31 @@ echo "[6/9] Resetting database..."
 echo "  This will:"
 echo "    - Drop ALL tables and data (including all chats, tickets, users, organizations, etc.)"
 echo "    - Make the database completely empty"
-echo "    - Note: You need to run 'npm run db:init' after setup to recreate tables and seed data"
+echo "    - Recreate tables and seed base data"
 if [ -f ".env" ]; then
-    # Load environment variables
-    export $(grep -v '^#' .env | xargs)
+    echo "  Running database reset..."
+    npm run db:reset > /dev/null 2>&1
     
-    if [ -n "$DB_NAME" ]; then
-        echo "  Dropping all database tables..."
-        export PGPASSWORD="$DB_PASSWORD"
-        
-        # Drop all tables, constraints, and types
-        psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" <<EOF
-DO \$\$ DECLARE
-    r RECORD;
-BEGIN
-    -- Drop all foreign key constraints first
-    FOR r IN (SELECT conname, conrelid::regclass FROM pg_constraint WHERE contype = 'f' AND connamespace = 'public'::regnamespace)
-    LOOP
-        EXECUTE 'ALTER TABLE ' || r.conrelid || ' DROP CONSTRAINT ' || r.conname;
-    END LOOP;
-    
-    -- Drop all tables
-    FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public')
-    LOOP
-        EXECUTE 'DROP TABLE IF EXISTS public.' || quote_ident(r.tablename) || ' CASCADE';
-    END LOOP;
-    
-    -- Drop all types (enums)
-    FOR r IN (SELECT typname FROM pg_type WHERE typtype = 'e' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public'))
-    LOOP
-        EXECUTE 'DROP TYPE IF EXISTS public.' || quote_ident(r.typname) || ' CASCADE';
-    END LOOP;
-END \$\$;
-EOF
-        
-        if [ $? -eq 0 ]; then
-            echo "  ✓ All database tables and data dropped"
-        else
-            echo "  ⚠ Database reset failed. You may need to run it manually after setup."
-            echo "  ⚠ Run 'npm run db:init' after setup to initialize database."
-        fi
+    if [ $? -eq 0 ]; then
+        echo "  ✓ Database reset completed (all tables dropped and recreated with base data)"
     else
-        echo "  ⚠ Database configuration not found in .env file."
+        echo "  ⚠ Database reset failed. You may need to run it manually after setup."
+        echo "  ⚠ Run 'npm run db:reset' after setup to reset database."
     fi
 else
     echo "  ⚠ .env file not found. Database will be reset after setup."
-    echo "  ⚠ After setup, run 'npm run db:init' to initialize database."
+    echo "  ⚠ After setup, run 'npm run db:reset' to reset database."
 fi
 echo ""
 
 # Step 7: Remove environment files
 echo "[7/9] Removing environment files..."
-[ -f ".env" ] && rm .env && echo "  ✓ Backend .env removed"
-[ -f ".env.local" ] && rm .env.local && echo "  ✓ Backend .env.local removed"
-[ -f ".env.production" ] && rm .env.production && echo "  ✓ Backend .env.production removed"
-[ -f "frontend/.env" ] && rm frontend/.env && echo "  ✓ Frontend .env removed"
-[ -f "frontend/.env.local" ] && rm frontend/.env.local && echo "  ✓ Frontend .env.local removed"
-[ -f "frontend/.env.production" ] && rm frontend/.env.production && echo "  ✓ Frontend .env.production removed"
+ENV_FILES=(".env" ".env.local" ".env.production" "frontend/.env" "frontend/.env.local" "frontend/.env.production")
+for file in "${ENV_FILES[@]}"; do
+    if [ -f "$file" ]; then
+        rm -f "$file" && echo "  ✓ $file removed" || echo "  ⚠ Failed to remove $file"
+    fi
+done
 echo ""
 
 # Step 8: Clear uploads (keep .gitkeep if exists)
@@ -208,18 +185,36 @@ if [ -d "uploads" ]; then
 fi
 echo ""
 
-# Step 9: Remove Docker volumes (optional, ask user)
-echo "[9/9] Docker volumes..."
-read -p "Do you want to remove Docker volumes? This will delete all database data permanently. (y/N): " remove_volumes
-if [ "$remove_volumes" = "y" ] || [ "$remove_volumes" = "Y" ]; then
-    if command -v docker-compose &> /dev/null || command -v docker &> /dev/null; then
-        docker-compose down -v 2>/dev/null || docker compose down -v 2>/dev/null || true
-        docker volume rm mero-jugx_postgres_data 2>/dev/null || true
-        docker volume rm mero-jugx_redis_data 2>/dev/null || true
-        echo "  ✓ Docker volumes removed"
+# Step 9: Remove Docker volumes (ALWAYS remove to ensure complete reset)
+echo "[9/9] Removing Docker volumes..."
+echo "  This ensures all database data is completely removed from Docker volumes"
+if command -v docker &> /dev/null; then
+    docker-compose down -v 2>/dev/null || docker compose down -v 2>/dev/null || true
+    
+    # Targeted volume removal
+    TARGET_VOLUMES=(
+        "mero_jugx_postgres_data" "mero_jugx_redis_data"
+        "merojugx_postgres_data" "merojugx_redis_data" 
+        "mero-jugx_postgres_data" "mero-jugx_redis_data"
+        "merojugx_pgdata" "merojugx_db_data"
+        "mero-jugx-mongo-data" "mero-jugx-postgres-data"
+    )
+    
+    for vol in "${TARGET_VOLUMES[@]}"; do
+        docker volume rm "$vol" 2>/dev/null || true
+    done
+
+    # Catch-all for residual volumes containing "mero"
+    RESIDUAL_VOLUMES=$(docker volume ls --format "{{.Name}}" | grep "mero" || true)
+    if [ ! -z "$RESIDUAL_VOLUMES" ]; then
+        echo "  Removing residual mero-related volumes..."
+        for vol in $RESIDUAL_VOLUMES; do
+            docker volume rm -f "$vol" 2>/dev/null || true
+        done
     fi
+    echo "  ✓ Docker volumes removed (database data completely cleared)"
 else
-    echo "  ⚠ Docker volumes kept (database data preserved)"
+    echo "  ⚠ Docker not found, skipping volume removal"
 fi
 echo ""
 
@@ -232,15 +227,12 @@ echo ""
 echo "Next steps:"
 echo "  1. Run 'npm run setup' to set up the project fresh"
 echo "     - Install all dependencies"
-echo "     - Create .env files with all defaults (preserves existing .env if present)"
+echo "     - Create .env files with all defaults"
 echo "     - Set up database (Docker or local)"
-echo "  2. Run 'npm run db:init' to initialize database"
-echo "     - Run all migrations (create all tables)"
-echo "     - Seed base data (packages, permissions, roles, etc.)"
-echo "  3. Run 'npm run start:dev' to start development servers"
+echo "  2. Run 'npm run start:dev' to start development servers"
 echo ""
-echo "Note: All data has been deleted. Database is completely empty."
-echo "      Run 'npm run db:init' to recreate tables and seed base data."
+echo "Note: Database has been reset with fresh tables and base data."
+echo "      If database reset failed, run 'npm run db:reset' after setup."
 echo ""
 echo "Ready to start fresh! 🚀"
 echo ""

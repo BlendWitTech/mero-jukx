@@ -3,14 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import toast from '@shared/hooks/useToast';
 import { Upload, X, File as FileIcon } from 'lucide-react';
-
-export enum DocumentType {
-  CONTRACT = 'contract',
-  LICENSE = 'license',
-  CERTIFICATE = 'certificate',
-  INVOICE = 'invoice',
-  OTHER = 'other',
-}
+import { DocumentType } from '../types/documents';
 
 interface DocumentUploadProps {
   isOpen: boolean;

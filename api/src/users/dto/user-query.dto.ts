@@ -33,4 +33,9 @@ export class UserQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 10;
+
+  @ApiPropertyOptional({ description: 'Filter by scope', example: 'master', enum: ['all', 'master'] })
+  @IsOptional()
+  @IsString()
+  scope?: 'all' | 'master';
 }

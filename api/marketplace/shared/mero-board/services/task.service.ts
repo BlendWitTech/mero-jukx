@@ -13,6 +13,7 @@ import { TaskComment } from '../entities/task-comment.entity';
 import { TaskAttachment } from '../entities/task-attachment.entity';
 import { TaskActivity, TaskActivityType } from '../entities/task-activity.entity';
 import { TaskDependency, TaskDependencyType } from '../entities/task-dependency.entity';
+import { TaskChecklistItem } from '../entities/task-checklist-item.entity';
 import { CreateTaskDependencyDto } from '../dto/create-task-dependency.dto';
 import { TaskTimeLog } from '../entities/task-time-log.entity';
 import { CreateTaskTimeLogDto } from '../dto/create-task-time-log.dto';
@@ -23,7 +24,9 @@ import { AddTaskCommentDto } from '../dto/add-task-comment.dto';
 import { UpdateTaskCommentDto } from '../dto/update-task-comment.dto';
 import { AddTaskAttachmentDto } from '../dto/add-task-attachment.dto';
 import { NotificationHelperService, NotificationType } from '../../../../src/notifications/notification-helper.service';
+import { BoardGateway } from '../gateways/board.gateway';
 import { User } from '../../../../src/database/entities/users.entity';
+import { TaskWatcher } from '../../../../src/database/entities/task_watchers.entity';
 
 @Injectable()
 export class TaskService {
@@ -46,10 +49,15 @@ export class TaskService {
     private dependencyRepository: Repository<TaskDependency>,
     @InjectRepository(TaskTimeLog)
     private timeLogRepository: Repository<TaskTimeLog>,
+    @InjectRepository(TaskChecklistItem)
+    private checklistRepository: Repository<TaskChecklistItem>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(TaskWatcher)
+    private watcherRepository: Repository<TaskWatcher>,
     private notificationHelper: NotificationHelperService,
-  ) {}
+    private boardGateway: BoardGateway,
+  ) { }
 
   async createTask(
     userId: string,
@@ -91,12 +99,20 @@ export class TaskService {
       created_by: userId,
       status: createDto.status || TaskStatus.TODO,
       priority: createDto.priority || TaskPriority.MEDIUM,
+      parent_task_id: (createDto as any).parent_task_id || null,
+      column_id: (createDto as any).column_id || null,
+      board_id: (createDto as any).board_id || null,
     });
 
     const savedTask = await this.taskRepository.save(task);
 
     // Create activity
     await this.createActivity(savedTask.id, userId, TaskActivityType.CREATED);
+
+    // Broadcast update
+    if (savedTask.board_id) {
+      this.boardGateway.broadcastTaskUpdated(savedTask.board_id, savedTask);
+    }
 
     // Send notifications
     try {
@@ -107,27 +123,6 @@ export class TaskService {
 
       const creator = await this.userRepository.findOne({ where: { id: userId } });
       const creatorName = creator ? `${creator.first_name} ${creator.last_name}` : 'Someone';
-
-      // Notify assignee if assigned
-      if (savedTask.assignee_id && savedTask.assignee_id !== userId) {
-        await this.notificationHelper.createNotification(
-          savedTask.assignee_id,
-          organizationId,
-          NotificationType.TASK_ASSIGNED,
-          'New task assigned to you',
-          `You have been assigned to task: ${savedTask.title}`,
-          {
-            route: `/org/:slug/app/mero-board/workspaces/${project?.workspace_id}/projects/${projectId}/tasks/${savedTask.id}`,
-            params: { slug: organizationId },
-          },
-          {
-            task_id: savedTask.id,
-            task_title: savedTask.title,
-            project_id: projectId,
-            workspace_id: project?.workspace_id,
-          },
-        );
-      }
 
       // Notify workspace members (except creator and assignee)
       if (project?.workspace_id) {
@@ -172,6 +167,38 @@ export class TaskService {
     }
 
     return savedTask;
+  }
+
+  async getTasksForCalendar(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<Task[]> {
+    const project = await this.projectRepository.findOne({
+      where: { id: projectId, organization_id: organizationId },
+    });
+    if (!project) {
+      throw new NotFoundException('Project not found');
+    }
+    if (project.workspace_id) {
+      const membership = await this.memberRepository.findOne({
+        where: { workspace_id: project.workspace_id, user_id: userId, is_active: true },
+      });
+      if (!membership) {
+        throw new ForbiddenException('You are not a member of this workspace');
+      }
+    }
+    return this.taskRepository
+      .createQueryBuilder('task')
+      .where('task.project_id = :projectId', { projectId })
+      .andWhere('task.organization_id = :organizationId', { organizationId })
+      .andWhere('task.due_date >= :startDate', { startDate })
+      .andWhere('task.due_date <= :endDate', { endDate })
+      .leftJoinAndSelect('task.creator', 'creator')
+      .leftJoinAndSelect('task.assignee', 'assignee')
+      .getMany();
   }
 
   async getTasks(
@@ -288,7 +315,7 @@ export class TaskService {
     // Sorting
     const sortBy = filters?.sortBy || 'created_at';
     const sortOrder = filters?.sortOrder || 'desc';
-    
+
     if (sortBy === 'due_date') {
       queryBuilder.orderBy('task.due_date', sortOrder.toUpperCase() as 'ASC' | 'DESC');
       queryBuilder.addOrderBy('task.created_at', 'DESC');
@@ -377,7 +404,7 @@ export class TaskService {
         project_id: projectId,
         organization_id: organizationId,
       },
-      relations: ['creator', 'assignee', 'assignees', 'project'],
+      relations: ['creator', 'assignee', 'assignees', 'project', 'checklist_items', 'sub_tasks', 'sub_tasks.assignee'],
     });
 
     if (!task) {
@@ -425,7 +452,7 @@ export class TaskService {
 
     // Track changes for activity log
     const changes: Record<string, any> = {};
-    
+
     if (updateDto.status && updateDto.status !== task.status) {
       changes.status = { old: task.status, new: updateDto.status };
       await this.createActivity(
@@ -457,7 +484,7 @@ export class TaskService {
     if (updateDto.due_date !== undefined) {
       const newDueDate = updateDto.due_date ? new Date(updateDto.due_date) : null;
       const oldDueDate = task.due_date;
-      
+
       if (newDueDate && !oldDueDate) {
         await this.createActivity(taskId, userId, TaskActivityType.DUE_DATE_SET);
       } else if (newDueDate && oldDueDate && newDueDate.getTime() !== oldDueDate.getTime()) {
@@ -478,6 +505,11 @@ export class TaskService {
     // Create general update activity if there were other changes
     if (Object.keys(updateDto).some(key => !['status', 'priority', 'assignee_id', 'due_date'].includes(key))) {
       await this.createActivity(taskId, userId, TaskActivityType.UPDATED);
+    }
+
+    // Broadcast update
+    if (updated.board_id) {
+      this.boardGateway.broadcastTaskUpdated(updated.board_id, updated);
     }
 
     // Send notifications for changes
@@ -646,6 +678,131 @@ export class TaskService {
     }
 
     await this.taskRepository.remove(task);
+  }
+
+  // Task Movement (Kanban)
+  async moveTask(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+    targetColumnId: string,
+    position: number,
+  ): Promise<Task> {
+    const task = await this.getTask(userId, organizationId, projectId, taskId);
+
+    const oldColumnId = task.column_id;
+    task.column_id = targetColumnId;
+    task.sort_order = position;
+
+    const savedTask = await this.taskRepository.save(task);
+
+    if (oldColumnId !== targetColumnId) {
+      await this.createActivity(
+        taskId,
+        userId,
+        TaskActivityType.STATUS_CHANGED,
+        { old_column: oldColumnId, new_column: targetColumnId },
+      );
+    }
+
+    // Broadcast movement
+    if (savedTask.board_id) {
+      this.boardGateway.broadcastTaskMoved(savedTask.board_id, {
+        taskId,
+        targetColumnId,
+        position,
+      });
+    }
+
+    return savedTask;
+  }
+
+  // Task Checklists
+  async addChecklistItem(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+    title: string,
+  ): Promise<TaskChecklistItem> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+
+    const item = this.checklistRepository.create({
+      task_id: taskId,
+      title,
+      created_by_id: userId,
+    });
+
+    const savedItem = await this.checklistRepository.save(item);
+
+    await this.createActivity(taskId, userId, TaskActivityType.UPDATED, {
+      action: 'checklist_item_added',
+      item_id: savedItem.id
+    });
+
+    return savedItem;
+  }
+
+  async toggleChecklistItem(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+    itemId: string,
+  ): Promise<TaskChecklistItem> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+
+    const item = await this.checklistRepository.findOne({
+      where: { id: itemId, task_id: taskId },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Checklist item not found');
+    }
+
+    item.is_completed = !item.is_completed;
+    if (item.is_completed) {
+      item.completed_at = new Date();
+      item.completed_by_id = userId;
+    } else {
+      item.completed_at = null;
+      item.completed_by_id = null;
+    }
+
+    const savedItem = await this.checklistRepository.save(item);
+
+    await this.createActivity(taskId, userId, TaskActivityType.UPDATED, {
+      action: item.is_completed ? 'checklist_item_completed' : 'checklist_item_uncompleted',
+      item_id: item.id
+    });
+
+    return savedItem;
+  }
+
+  async deleteChecklistItem(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+    itemId: string,
+  ): Promise<void> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+
+    const item = await this.checklistRepository.findOne({
+      where: { id: itemId, task_id: taskId },
+    });
+
+    if (!item) {
+      throw new NotFoundException('Checklist item not found');
+    }
+
+    await this.checklistRepository.remove(item);
+
+    await this.createActivity(taskId, userId, TaskActivityType.UPDATED, {
+      action: 'checklist_item_deleted',
+      item_id: itemId
+    });
   }
 
   // Task Comments
@@ -1400,6 +1557,59 @@ export class TaskService {
       logs_by_user: Array.from(userMap.values()),
       logs_by_task: Array.from(taskMap.values()),
     };
+  }
+
+  // ── Card Watchers ─────────────────────────────────────────────────────────
+
+  async addWatcher(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<TaskWatcher> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+    const existing = await this.watcherRepository.findOne({ where: { task_id: taskId, user_id: userId } });
+    if (existing) return existing;
+    const watcher = this.watcherRepository.create({ task_id: taskId, user_id: userId });
+    return this.watcherRepository.save(watcher);
+  }
+
+  async removeWatcher(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<void> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+    await this.watcherRepository.delete({ task_id: taskId, user_id: userId });
+  }
+
+  async getWatchers(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+  ): Promise<TaskWatcher[]> {
+    await this.getTask(userId, organizationId, projectId, taskId);
+    return this.watcherRepository.find({ where: { task_id: taskId }, relations: ['user'] });
+  }
+
+  // ── CRM Deal Linking ─────────────────────────────────────────────────────
+
+  async linkCrmDeal(
+    userId: string,
+    organizationId: string,
+    projectId: string,
+    taskId: string,
+    crmDealId: string | null,
+  ): Promise<Task> {
+    const task = await this.taskRepository.findOne({
+      where: { id: taskId, project_id: projectId, organization_id: organizationId },
+    });
+    if (!task) throw new NotFoundException('Task not found');
+
+    task.crm_deal_id = crmDealId;
+    return this.taskRepository.save(task);
   }
 }
 

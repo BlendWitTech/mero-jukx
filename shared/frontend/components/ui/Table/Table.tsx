@@ -56,7 +56,7 @@ export const TableRow = forwardRef<
   <tr
     ref={ref}
     className={cn(
-      'border-b transition-colors hover:bg-gray-50 dark:hover:bg-gray-800 data-[state=selected]:bg-gray-100 dark:data-[state=selected]:bg-gray-800',
+      'border-b transition-colors hover-surface data-[state=selected]:hover-theme-strong',
       className
     )}
     {...props}

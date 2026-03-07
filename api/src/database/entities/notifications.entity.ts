@@ -11,16 +11,15 @@ import { User } from './users.entity';
 import { Organization } from './organizations.entity';
 
 @Entity('notifications')
-@Index(['user_id'])
-@Index(['organization_id'])
-@Index(['read_at'])
-@Index(['created_at'])
+@Index('IDX_NOTIFICATIONS_USER_ID', ['user_id'])
+@Index('IDX_NOTIFICATIONS_ORG_ID', ['organization_id'])
+@Index('IDX_NOTIFICATIONS_READ_AT', ['read_at'])
+@Index('IDX_NOTIFICATIONS_CREATED_AT', ['created_at'])
 export class Notification {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'uuid' })
-  @Index()
   user_id: string;
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
@@ -28,7 +27,6 @@ export class Notification {
   user: User;
 
   @Column({ type: 'uuid', nullable: true })
-  @Index()
   organization_id: string | null;
 
   @ManyToOne(() => Organization, { nullable: true, onDelete: 'CASCADE' })
@@ -48,11 +46,9 @@ export class Notification {
   data: Record<string, any> | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  @Index()
   read_at: Date | null;
 
   @CreateDateColumn()
-  @Index()
   created_at: Date;
 
   // Helper method

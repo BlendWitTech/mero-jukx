@@ -10,12 +10,13 @@ import {
     ChevronLeft,
     FileSpreadsheet,
     Settings,
+    CalendarCheck,
+    BarChart2,
+    Contact,
 } from 'lucide-react';
 import { useTheme } from '@frontend/contexts/ThemeContext';
 import { useAuthStore } from '@frontend/store/authStore';
-import { logoutFromAppBySlug } from '@shared/frontend/utils/appAuth';
-import toast from '@shared/frontend/hooks/useToast';
-import { ConfirmDialog } from '@shared/frontend/components/feedback/ConfirmDialog';
+import { logoutFromAppBySlug, toast, ConfirmDialog } from '@shared';
 import { useAppContext } from '../contexts/AppContext';
 
 
@@ -78,6 +79,21 @@ export default function MeroCrmSidebar({
             name: 'Clients',
             href: '/clients',
             icon: Users,
+        },
+        {
+            name: 'Contacts',
+            href: '/contacts',
+            icon: Contact,
+        },
+        {
+            name: 'Activities',
+            href: '/activities',
+            icon: CalendarCheck,
+        },
+        {
+            name: 'Reports',
+            href: '/reports',
+            icon: BarChart2,
         },
         {
             name: 'Invoices',

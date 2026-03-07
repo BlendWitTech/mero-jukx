@@ -3,11 +3,8 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import {
-  OrganizationMember,
-  OrganizationMemberStatus,
-} from '../../database/entities/organization_members.entity';
-import { Role } from '../../database/entities/roles.entity';
+import { OrganizationMember, Role } from '../../database/entities';
+import { OrganizationMemberStatus } from '../../database/entities/organization_members.entity';
 import { AuditLogsService } from '../../audit-logs/audit-logs.service';
 
 @Injectable()

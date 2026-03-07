@@ -15,6 +15,7 @@ export interface TopHeaderProps {
   onToggleTheme: () => void;
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
+  searchComponent?: React.ReactNode;
   notificationsComponent?: React.ReactNode;
   rightSidebarActions?: React.ReactNode; // Close/minimize buttons when right sidebar is available
   showCloseMinimize?: boolean; // Show close/minimize in header when right sidebar is not available
@@ -29,6 +30,7 @@ export function TopHeader({
   onToggleTheme,
   sidebarCollapsed = false,
   onToggleSidebar,
+  searchComponent,
   notificationsComponent,
   rightSidebarActions,
   showCloseMinimize = false,
@@ -69,6 +71,12 @@ export function TopHeader({
           {title}
         </h1>
       </div>
+      {/* Center search component */}
+      {searchComponent && (
+        <div className="flex-1 flex justify-center px-4">
+          {searchComponent}
+        </div>
+      )}
       <div className="flex items-center gap-2">
         {/* Theme toggle */}
         <button

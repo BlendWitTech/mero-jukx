@@ -59,7 +59,7 @@ export default function OrganizationSwitcher({ compact = false }: { compact?: bo
     try {
       const response = await api.put('/organizations/switch', { organization_id: orgId });
       const { access_token, refresh_token, user: newUser, organization: newOrg } = response.data;
-      
+
       const authStore = useAuthStore.getState();
       // Ensure slug is included in organization object
       const orgWithSlug = {
@@ -73,7 +73,7 @@ export default function OrganizationSwitcher({ compact = false }: { compact?: bo
         orgWithSlug,
         null
       );
-      
+
       // Navigate to organization slug route
       if (orgWithSlug.slug) {
         window.location.href = `/org/${orgWithSlug.slug}`;
@@ -104,12 +104,12 @@ export default function OrganizationSwitcher({ compact = false }: { compact?: bo
         ref={buttonRef}
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full ${compact ? 'w-12 h-12' : 'px-2 py-1.5'} ${compact ? 'rounded-2xl' : 'rounded'} flex items-center ${compact ? 'justify-center' : 'gap-2'} transition-colors group ${compact ? 'relative' : ''} ${compact ? '' : 'text-left'} ${compact ? 'overflow-visible' : ''}`}
-        style={compact 
-          ? { 
-              background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})`,
-              overflow: 'visible',
-              padding: '0'
-            }
+        style={compact
+          ? {
+            background: `linear-gradient(to bottom right, ${theme.colors.primary}, ${theme.colors.secondary})`,
+            overflow: 'visible',
+            padding: '0'
+          }
           : {}
         }
         onMouseEnter={(e) => {
@@ -164,10 +164,10 @@ export default function OrganizationSwitcher({ compact = false }: { compact?: bo
             className="fixed inset-0 z-[9998]"
             onClick={() => setIsOpen(false)}
           />
-          <div 
-            className="fixed z-[9999] w-64 rounded-lg shadow-xl overflow-hidden" 
-            style={{ 
-              backgroundColor: theme.colors.surface, 
+          <div
+            className="fixed z-[9999] w-64 rounded-lg shadow-xl overflow-hidden"
+            style={{
+              backgroundColor: theme.colors.surface,
               border: `1px solid ${theme.colors.border}`,
               top: `${dropdownPosition.top}px`,
               left: `${dropdownPosition.left}px`,
@@ -177,46 +177,48 @@ export default function OrganizationSwitcher({ compact = false }: { compact?: bo
               <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide" style={{ color: theme.colors.textSecondary }}>
                 Switch Organization
               </div>
-              
+
               {/* Organizations */}
               {organizations && organizations.length > 0 && (
                 <>
                   <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wide mt-2" style={{ color: theme.colors.textSecondary }}>
                     Organizations
                   </div>
-                  {organizations.map((org: any) => (
-                    <button
-                      key={org.id}
-                      onClick={() => handleSwitchOrganization(org.id)}
-                      className="w-full px-3 py-2 rounded text-left transition-colors flex items-center gap-3 group"
-                      style={{ color: theme.colors.text }}
-                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.background}
-                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
-                      <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: theme.colors.primary }}>
-                        <span className="text-sm font-bold text-white">
-                          {org.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate" style={{ color: theme.colors.text }}>
-                          {org.name}
-                        </p>
-                        <p className="text-xs truncate" style={{ color: theme.colors.textSecondary }}>
-                          {org.email}
-                        </p>
-                      </div>
-                      {organization?.id === org.id && (
-                        <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#23a55a' }}></div>
-                      )}
-                    </button>
-                  ))}
+                  {organizations
+                    .filter((org: any) => org.org_type === 'MAIN' || org.org_type === 'CREATOR')
+                    .map((org: any) => (
+                      <button
+                        key={org.id}
+                        onClick={() => handleSwitchOrganization(org.id)}
+                        className="w-full px-3 py-2 rounded text-left transition-colors flex items-center gap-3 group"
+                        style={{ color: theme.colors.text }}
+                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = theme.colors.background}
+                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                      >
+                        <div className="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: theme.colors.primary }}>
+                          <span className="text-sm font-bold text-white">
+                            {org.name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate" style={{ color: theme.colors.text }}>
+                            {org.name}
+                          </p>
+                          <p className="text-xs truncate" style={{ color: theme.colors.textSecondary }}>
+                            {org.email}
+                          </p>
+                        </div>
+                        {organization?.id === org.id && (
+                          <div className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#23a55a' }}></div>
+                        )}
+                      </button>
+                    ))}
                 </>
               )}
 
               {/* Add Organization */}
               <div className="mt-2 pt-2" style={{ borderTop: `1px solid ${theme.colors.border}` }}>
-                <button 
+                <button
                   className="w-full px-3 py-2 rounded text-left transition-colors flex items-center gap-3"
                   style={{ color: theme.colors.textSecondary }}
                   onMouseEnter={(e) => {

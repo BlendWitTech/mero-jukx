@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Stock } from '../entities/stock.entity';
 import { StockMovement, StockMovementType } from '../entities/stock-movement.entity';
 
@@ -23,58 +23,149 @@ export class StockService {
         quantity: number,
         type: StockMovementType,
         reason: string,
-        referenceId: string, // e.g., Order ID or Shipment ID
+        referenceId: string,
         userId: string,
         organizationId: string
     ): Promise<Stock> {
-        let stock = await this.getStock(productId, warehouseId);
+        return this.stockRepository.manager.transaction(async (manager) => {
+            return this.adjustStockInternal(manager, productId, warehouseId, quantity, type, reason, referenceId, userId, organizationId);
+        });
+    }
+
+    private async adjustStockInternal(
+        manager: any,
+        productId: string,
+        warehouseId: string,
+        quantity: number,
+        type: StockMovementType,
+        reason: string,
+        referenceId: string,
+        userId: string,
+        organizationId: string
+    ): Promise<Stock> {
+        let stock = await manager.findOne(Stock, { where: { productId, warehouseId } });
 
         if (!stock) {
-            // If adding stock, create record. If removing, might throw error or allow negative?
-            if (type === StockMovementType.IN) {
-                stock = this.stockRepository.create({
-                    productId: productId,
-                    warehouseId: warehouseId,
+            if (type === StockMovementType.IN || type === StockMovementType.TRANSFER_IN || type === StockMovementType.ADJUSTMENT) {
+                stock = manager.create(Stock, {
+                    productId,
+                    warehouseId,
                     quantity: 0,
-                    // organization_id not in Stock entity? Check again. 
-                    // Stock entity has no organizationId column in the file I viewed!
-                    // It has productId, warehouseId, quantity. 
-                    // Let's assume for now we don't need orgId on Stock itself if accessed via Warehouse, 
-                    // or I missed it. The viewed file showed IDs 1-34, no orgId.
                 });
             } else {
                 throw new NotFoundException('Stock record not found for this product in the specified warehouse');
             }
         }
 
-        if (type === StockMovementType.OUT && stock.quantity < quantity) {
+        const isDeduction = type === StockMovementType.OUT || type === StockMovementType.TRANSFER_OUT;
+
+        if (isDeduction && Number(stock.quantity) < quantity) {
             throw new BadRequestException(`Insufficient stock. Available: ${stock.quantity}, Required: ${quantity}`);
         }
 
-        // Update quantity
-        if (type === StockMovementType.IN) {
-            stock.quantity += quantity;
+        if (isDeduction) {
+            stock.quantity = Number(stock.quantity) - quantity;
         } else {
-            stock.quantity -= quantity;
+            stock.quantity = Number(stock.quantity) + quantity;
         }
 
-        const savedStock = await this.stockRepository.save(stock);
+        const savedStock = await manager.save(Stock, stock);
 
-        // Record Movement
-        const movement = this.stockMovementRepository.create({
-            // stockId: savedStock.id, // Not in entity
-            productId: productId,
-            warehouseId: warehouseId,
+        const movement = manager.create(StockMovement, {
+            productId,
+            warehouseId,
             type,
             quantity,
-            notes: reason, // Mapped reason to notes
-            referenceId: referenceId,
+            notes: reason,
+            referenceId,
             createdById: userId,
-            organizationId: organizationId,
+            organizationId,
         });
 
-        await this.stockMovementRepository.save(movement);
+        await manager.save(StockMovement, movement);
 
         return savedStock;
+    }
+
+    async transferStock(
+        productId: string,
+        fromWarehouseId: string,
+        toWarehouseId: string,
+        quantity: number,
+        notes: string,
+        userId: string,
+        organizationId: string
+    ): Promise<void> {
+        if (fromWarehouseId === toWarehouseId) {
+            throw new BadRequestException('Source and destination warehouses must be different');
+        }
+
+        await this.stockRepository.manager.transaction(async (manager) => {
+            // Deduct from source
+            await this.adjustStockInternal(
+                manager,
+                productId,
+                fromWarehouseId,
+                quantity,
+                StockMovementType.TRANSFER_OUT,
+                notes,
+                null,
+                userId,
+                organizationId
+            );
+
+            // Add to destination
+            await this.adjustStockInternal(
+                manager,
+                productId,
+                toWarehouseId,
+                quantity,
+                StockMovementType.TRANSFER_IN,
+                notes,
+                null,
+                userId,
+                organizationId
+            );
+        });
+    }
+
+    async calculateValuation(productId: string, organizationId: string, method: 'FIFO' | 'LIFO' = 'FIFO'): Promise<number> {
+        const stocks = await this.stockRepository.find({
+            where: {
+                productId,
+                warehouse: { organization_id: organizationId }
+            },
+            relations: ['warehouse']
+        });
+        let remainingQty = stocks.reduce((sum, s) => sum + Number(s.quantity), 0);
+
+        if (remainingQty <= 0) return 0;
+
+        const sortedMovements = await this.stockMovementRepository.find({
+            where: {
+                productId,
+                organizationId,
+                type: In([StockMovementType.IN, StockMovementType.ADJUSTMENT])
+            },
+            order: { createdAt: method === 'FIFO' ? 'DESC' : 'ASC' }
+        });
+
+        let totalValue = 0;
+        let qtyToValue = remainingQty;
+
+        for (const mvmt of sortedMovements) {
+            if (qtyToValue <= 0) break;
+
+            const takeQty = Math.min(qtyToValue, Number(mvmt.quantity));
+            totalValue += takeQty * (Number(mvmt.costPrice) || 0);
+            qtyToValue -= takeQty;
+        }
+
+        if (qtyToValue > 0 && sortedMovements.length > 0) {
+            const lastCost = Number(sortedMovements[0].costPrice) || 0;
+            totalValue += qtyToValue * lastCost;
+        }
+
+        return totalValue;
     }
 }

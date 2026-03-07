@@ -27,7 +27,7 @@ export class ReportsController {
         @CurrentOrganization('id') orgId: string,
         @Query('threshold') threshold?: number
     ) {
-        return this.reportsService.getLowStockAlerts(orgId, threshold ? Number(threshold) : 10);
+        return this.reportsService.getLowStockAlerts(orgId);
     }
 
     @Get('stock-movements')
@@ -36,5 +36,43 @@ export class ReportsController {
         @Query('limit') limit?: number
     ) {
         return this.reportsService.getStockMovementHistory(orgId, limit ? Number(limit) : 50);
+    }
+
+    @Get('expiring')
+    getExpiringProducts(
+        @CurrentOrganization('id') orgId: string,
+        @Query('days') days?: number
+    ) {
+        return this.reportsService.getExpiringProducts(orgId, days ? Number(days) : 30);
+    }
+
+    @Get('aging')
+    getAgingAnalysis(
+        @CurrentOrganization('id') orgId: string,
+        @Query('days') days?: string
+    ) {
+        return this.reportsService.getAgingAnalysis(orgId, days ? Number(days) : 90);
+    }
+
+    @Get('valuation')
+    getValuationReport(@CurrentOrganization('id') orgId: string) {
+        return this.reportsService.getStockValuation(orgId).then(data => ({
+            data: data.breakdown.map((b: any) => ({
+                productId: '',
+                productName: b.product,
+                sku: '',
+                category: '',
+                warehouseName: b.warehouse,
+                availableQuantity: b.quantity,
+                unitPrice: b.unitCost,
+                totalValue: b.totalValue,
+            })),
+            summary: {
+                totalItems: data.breakdown.reduce((s: number, b: any) => s + Number(b.quantity), 0),
+                totalValue: data.totalValuation,
+                warehouseBreakdown: data.warehouseValuation,
+                categoryBreakdown: {},
+            },
+        }));
     }
 }

@@ -29,7 +29,7 @@ console.error = (...args: any[]) => {
     }
     return String(arg);
   }).join(' ').toLowerCase();
-  
+
   // Check if this is an expected error we should suppress
   if (
     allArgsStr.includes('message channel closed') ||
@@ -79,6 +79,21 @@ window.addEventListener('unhandledrejection', (event) => {
     return;
   }
 });
+
+/**
+ * GLOBAL UI ENFORCEMENT: 
+ * Strictly disable mouse-wheel value changes on number inputs.
+ * This prevents accidental accounting errors from scrolling over focused fields.
+ */
+document.addEventListener('wheel', (event: WheelEvent) => {
+  const target = event.target as HTMLElement;
+  if (target && target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'number') {
+    // If input is focused, prevent scroll from changing value
+    if (document.activeElement === target) {
+      event.preventDefault();
+    }
+  }
+}, { passive: false });
 
 // Initialize Sentry before rendering
 initSentry();

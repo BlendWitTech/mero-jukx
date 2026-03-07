@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsEnum } from 'class-validator';
-import { BoardType } from '../../database/entities/boards.entity';
+import { BoardType, BoardPrivacy } from '../../database/entities/boards.entity';
 
 export class CreateBoardDto {
     @IsString()
@@ -20,6 +20,10 @@ export class CreateBoardDto {
     @IsOptional()
     @IsString()
     projectId?: string;
+
+    @IsOptional()
+    @IsEnum(BoardPrivacy)
+    privacy?: BoardPrivacy;
 }
 
 export class UpdateBoardDto extends CreateBoardDto { }

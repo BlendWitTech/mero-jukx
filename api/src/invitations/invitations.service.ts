@@ -110,18 +110,54 @@ export class InvitationsService {
       throw new NotFoundException('Organization not found');
     }
 
-    // Check user limit
-    const activeMembersCount = await this.memberRepository.count({
-      where: {
-        organization_id: organizationId,
-        status: OrganizationMemberStatus.ACTIVE,
-      },
+    // Get organization group (Main + all Branches)
+    const rootOrgId = organization.org_type === 'MAIN' ? organization.id : organization.parent_id;
+    if (!rootOrgId) {
+      throw new BadRequestException('Organization structure is invalid');
+    }
+
+    // Get all organization IDs in this group
+    const orgGroup = await this.organizationRepository.find({
+      where: [{ id: rootOrgId }, { parent_id: rootOrgId }],
+      select: ['id'],
+    });
+    const groupIds = orgGroup.map(o => o.id);
+
+    // Check if user exists
+    let existingUser = await this.userRepository.findOne({
+      where: { email: dto.email.toLowerCase().trim() },
     });
 
-    if (activeMembersCount >= organization.user_limit) {
-      throw new BadRequestException(
-        'Organization user limit reached. Please upgrade your package.',
-      );
+    // Check if user is already a member of ANY organization in the group
+    let isAlreadyInGroup = false;
+    if (existingUser) {
+      const groupMembership = await this.memberRepository.findOne({
+        where: {
+          user_id: existingUser.id,
+          organization_id: In(groupIds),
+          status: OrganizationMemberStatus.ACTIVE,
+        },
+      });
+      isAlreadyInGroup = !!groupMembership;
+    }
+
+    // Only check limit if user is NOT already in the group
+    if (!isAlreadyInGroup) {
+      const distinctUsersResult = await this.memberRepository
+        .createQueryBuilder('member')
+        .select('COUNT(DISTINCT member.user_id)', 'count')
+        .where('member.organization_id IN (:...groupIds)', { groupIds })
+        .andWhere('member.status = :status', { status: OrganizationMemberStatus.ACTIVE })
+        .getRawOne();
+
+      const currentDistinctCount = parseInt(distinctUsersResult?.count || '0', 10);
+      const userLimit = organization.user_limit || organization.package?.base_user_limit || 0;
+
+      if (currentDistinctCount >= userLimit) {
+        throw new BadRequestException(
+          `Organization user limit reached (${userLimit}). Please upgrade your package to add more distinct users.`,
+        );
+      }
     }
 
     // Check if user is already an active member (exclude revoked/left members - they can be re-invited)
@@ -207,10 +243,7 @@ export class InvitationsService {
       }
     }
 
-    // Check if user exists (including revoked users - they can be re-invited)
-    const existingUser = await this.userRepository.findOne({
-      where: { email: dto.email },
-    });
+    // isReinvitation check continues below
 
     // If user exists, check if they have a revoked/left membership for this organization
     // This helps us determine if this is a re-invitation
@@ -231,9 +264,10 @@ export class InvitationsService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 3); // 3 days expiry
 
+    const normalizedEmail = dto.email.toLowerCase().trim();
     const invitation = this.invitationRepository.create({
       organization_id: organizationId,
-      email: dto.email,
+      email: normalizedEmail,
       role_id: dto.role_id,
       token,
       status: InvitationStatus.PENDING,
@@ -428,8 +462,9 @@ export class InvitationsService {
     const invitation = await this.getInvitationByToken(token);
 
     // Check if user exists (by email, regardless of invitation.user_id)
+    const normalizedEmail = invitation.email.toLowerCase().trim();
     let user = await this.userRepository.findOne({
-      where: { email: invitation.email },
+      where: { email: normalizedEmail },
     });
 
     // Determine if new or existing user
@@ -505,8 +540,15 @@ export class InvitationsService {
       // If user is suspended, reactivate them
       if (user.status === UserStatus.SUSPENDED) {
         user.status = UserStatus.ACTIVE;
-        await this.userRepository.save(user);
       }
+
+      // Ensure existing user is marked as verified when they accept an invitation
+      if (!user.email_verified) {
+        user.email_verified = true;
+        user.email_verified_at = new Date();
+      }
+
+      await this.userRepository.save(user);
     }
 
     // Check if user is already an active member

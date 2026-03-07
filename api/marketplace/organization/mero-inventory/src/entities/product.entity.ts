@@ -17,6 +17,22 @@ export class Product {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
+    @Column({ type: 'uuid', nullable: true })
+    parent_id: string | null;
+
+    @ManyToOne(() => Product, product => product.variants)
+    @JoinColumn({ name: 'parent_id' })
+    parent: Product | null;
+
+    @OneToMany(() => Product, product => product.parent)
+    variants: Product[];
+
+    @Column({ type: 'varchar', length: 50, nullable: true })
+    attribute_type: string | null; // e.g., 'Color', 'Size'
+
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    attribute_value: string | null; // e.g., 'Blue', 'XL'
+
     @OneToMany(() => Stock, stock => stock.product)
     stocks: Stock[];
 
@@ -65,6 +81,12 @@ export class Product {
 
     @Column({ type: 'boolean', default: false })
     track_expiry: boolean;
+
+    @Column({ type: 'date', nullable: true })
+    expiry_date: string | null;
+
+    @Column({ type: 'int', default: 30 })
+    expiry_alert_days: number;
 
     @Column({ type: 'boolean', default: true })
     is_active: boolean;

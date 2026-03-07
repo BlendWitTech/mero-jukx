@@ -67,6 +67,24 @@
       "@accounting/*": [
         "./marketplace/organization/mero-accounting/*"
       ],
+      "@khata/*": [
+        "./marketplace/organization/mero-khata/*"
+      ],
+      "@khata": [
+        "./marketplace/organization/mero-khata/MeroKhataRouter"
+      ],
+      "@hr/*": [
+        "./marketplace/organization/mero-hr/*"
+      ],
+      "@hr": [
+        "./marketplace/organization/mero-hr/MeroHrRouter"
+      ],
+      "@cms/*": [
+        "./marketplace/organization/mero-cms/*"
+      ],
+      "@cms": [
+        "./marketplace/organization/mero-cms/MeroCmsRouter"
+      ],
       "@creator/*": [
         "./marketplace/creator/portal/*"
       ],
@@ -120,7 +138,8 @@
     "**/backend",
     "../apps/**/backend",
     "**/*.spec.ts",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/vite.config.ts"
   ],
   "references": [
     {

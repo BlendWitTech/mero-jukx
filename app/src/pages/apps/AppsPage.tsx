@@ -27,6 +27,8 @@ import {
   UserMinus,
   FolderKanban,
   Package,
+  BookOpen,
+  Calculator,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import toast from '@shared/hooks/useToast';
@@ -107,6 +109,7 @@ export default function AppsPage() {
   const canSubscribe = hasPermission('apps.subscribe');
   const canManage = hasPermission('apps.manage');
   const canView = hasPermission('apps.view');
+  const isBranch = organization?.org_type === 'BRANCH' || !!organization?.parent_id;
 
   // Filters and search
   const [searchTerm, setSearchTerm] = useState('');
@@ -117,7 +120,7 @@ export default function AppsPage() {
   const [showAppModal, setShowAppModal] = useState(false);
   const [showPurchaseModal, setShowPurchaseModal] = useState(false);
   const [purchaseBillingPeriod, setPurchaseBillingPeriod] = useState<'monthly' | 'yearly'>('monthly');
-  const [purchaseGateway, setPurchaseGateway] = useState<'stripe' | 'esewa'>('esewa');
+  const [purchaseGateway, setPurchaseGateway] = useState<'stripe' | 'esewa' | 'ime_pay'>('esewa');
   const [startTrial, setStartTrial] = useState(false);
   const [autoRenew, setAutoRenew] = useState(true);
   // Removed: selectedUserIds, showAccessModal, accessAppId - using invitation system instead
@@ -427,6 +430,21 @@ export default function AppsPage() {
     return subscription?.status || null;
   };
 
+  const getTrialSubscription = (appId: number): OrganizationApp | null => {
+    const sub = orgApps.find((oa) => oa.app_id === appId);
+    return sub?.status === 'trial' ? sub : null;
+  };
+
+  const activeAppsCount = orgApps.filter((oa) => oa.status === 'active' || oa.status === 'trial').length;
+  const hasBundleDiscount = activeAppsCount >= 2;
+
+  const getModalPrice = (basePrice: number) => {
+    let price = basePrice;
+    if (purchaseBillingPeriod === 'yearly') price = price * 12 * 0.80;
+    if (hasBundleDiscount) price = price * 0.85;
+    return price;
+  };
+
   const formatDate = (dateString: string | null | undefined) => {
     if (!dateString) return null;
     const date = new Date(dateString);
@@ -537,6 +555,16 @@ export default function AppsPage() {
             </div>
           </div>
         </div>
+
+        {/* Bundle Discount Banner */}
+        {hasBundleDiscount && canSubscribe && (
+          <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium"
+            style={{ backgroundColor: '#f0fdf4', border: '1px solid #bbf7d0', color: '#16a34a' }}
+          >
+            <Zap className="w-4 h-4 flex-shrink-0" />
+            Bundle discount active — 15% off any additional apps you subscribe to
+          </div>
+        )}
 
         {/* Apps Grid */}
         {appsLoading ? (
@@ -652,11 +680,8 @@ export default function AppsPage() {
                         if (app.icon_url === 'Users') return <Users className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'FolderKanban') return <FolderKanban className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'Package') return <Package className="w-10 h-10" style={{ color: theme.colors.primary }} />;
-
-                        // Check for older slug-based mappings if icon_url is null (fallback)
-                        if (app.slug === 'mero-crm') return <Users className="w-10 h-10" style={{ color: theme.colors.primary }} />;
-                        if (app.slug === 'mero-board') return <FolderKanban className="w-10 h-10" style={{ color: theme.colors.primary }} />;
-                        if (app.slug === 'mero-inventory') return <Package className="w-10 h-10" style={{ color: theme.colors.primary }} />;
+                        if (app.icon_url === 'BookOpen' || app.slug === 'mero-khata') return <BookOpen className="w-10 h-10" style={{ color: theme.colors.primary }} />;
+                        if (app.icon_url === 'Calculator' || app.slug === 'mero-accounting') return <Calculator className="w-10 h-10" style={{ color: theme.colors.primary }} />;
 
                         return app.icon_url ? (
                           <img
@@ -695,6 +720,32 @@ export default function AppsPage() {
                   >
                     {app.name}
                   </h3>
+
+                  {/* Trial Days Banner */}
+                  {(() => {
+                    const trialSub = getTrialSubscription(app.id);
+                    if (!trialSub) return null;
+                    const daysLeft = getDaysRemaining(trialSub.trial_ends_at);
+                    if (daysLeft === null) return null;
+                    const isUrgent = daysLeft <= 3;
+                    return (
+                      <div className="mt-1 text-xs font-semibold px-2 py-0.5 rounded-full w-full text-center"
+                        style={{
+                          backgroundColor: isUrgent ? '#fef2f2' : '#fffbeb',
+                          color: isUrgent ? '#dc2626' : '#d97706',
+                          border: `1px solid ${isUrgent ? '#fca5a5' : '#fcd34d'}`,
+                        }}
+                      >
+                        {daysLeft > 0 ? `Trial — ${daysLeft}d left` : 'Trial expired'}
+                        {isUrgent && daysLeft > 0 && (
+                          <button
+                            className="ml-1 underline text-xs"
+                            onClick={(e) => { e.stopPropagation(); handlePurchase(app); }}
+                          >Upgrade</button>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })}
@@ -721,11 +772,8 @@ export default function AppsPage() {
                         if (selectedApp.icon_url === 'Users') return <Users className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'FolderKanban') return <FolderKanban className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'Package') return <Package className="w-32 h-32" style={{ color: theme.colors.primary }} />;
-
-                        // Check for older slug-based mappings (fallback)
-                        if (selectedApp.slug === 'mero-crm') return <Users className="w-32 h-32" style={{ color: theme.colors.primary }} />;
-                        if (selectedApp.slug === 'mero-board') return <FolderKanban className="w-32 h-32" style={{ color: theme.colors.primary }} />;
-                        if (selectedApp.slug === 'mero-inventory') return <Package className="w-32 h-32" style={{ color: theme.colors.primary }} />;
+                        if (selectedApp.icon_url === 'BookOpen' || selectedApp.slug === 'mero-khata') return <BookOpen className="w-32 h-32" style={{ color: theme.colors.primary }} />;
+                        if (selectedApp.icon_url === 'Calculator' || selectedApp.slug === 'mero-accounting') return <Calculator className="w-32 h-32" style={{ color: theme.colors.primary }} />;
 
                         return selectedApp.icon_url ? (
                           <img
@@ -763,9 +811,9 @@ export default function AppsPage() {
                       <p style={{ color: theme.colors.textSecondary }}>{selectedApp.category}</p>
                     </div>
                     <div className="text-right">
-                      {selectedApp.price === 0 ? (
+                      {(selectedApp.price === 0 || isBranch) ? (
                         <div className="text-3xl font-bold" style={{ background: `linear-gradient(to right, ${theme.colors.primary}, ${theme.colors.secondary})`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-                          Free
+                          {selectedApp.price === 0 ? 'Free' : 'Subscription Required'}
                         </div>
                       ) : (
                         <>
@@ -910,7 +958,7 @@ export default function AppsPage() {
                       }
 
                       const purchased = isPurchased(selectedApp.id);
-                      if (!isSubscribed(selectedApp.id) && canSubscribe) {
+                      if (!isSubscribed(selectedApp.id) && canSubscribe && !isBranch) {
                         return (
                           <button
                             onClick={() => {
@@ -961,7 +1009,7 @@ export default function AppsPage() {
                             Enter App
                           </button>
                         );
-                      } else if (isSubscribed(selectedApp.id) && !purchased) {
+                      } else if (isSubscribed(selectedApp.id) && !purchased && !isBranch) {
                         return (
                           <button
                             onClick={() => {
@@ -1043,7 +1091,8 @@ export default function AppsPage() {
                         color: theme.colors.text,
                       }}
                     >
-                      Yearly
+                      <div>Annual</div>
+                      <div className="text-xs font-semibold" style={{ color: '#16a34a' }}>· 20% off</div>
                     </button>
                   </div>
                 </div>
@@ -1067,62 +1116,67 @@ export default function AppsPage() {
 
                 <div>
                   <label className="block text-sm font-semibold mb-2" style={{ color: theme.colors.text }}>Payment Method</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setPurchaseGateway('esewa')}
-                      className="p-3 rounded-lg border transition-all"
-                      style={purchaseGateway === 'esewa' ? {
-                        backgroundColor: `${theme.colors.primary}33`,
-                        borderColor: `${theme.colors.primary}80`,
-                        color: theme.colors.primary,
-                      } : {
-                        backgroundColor: theme.colors.background,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text,
-                      }}
-                    >
-                      eSewa
-                    </button>
-                    <button
-                      onClick={() => setPurchaseGateway('stripe')}
-                      className="p-3 rounded-lg border transition-all"
-                      style={purchaseGateway === 'stripe' ? {
-                        backgroundColor: `${theme.colors.primary}33`,
-                        borderColor: `${theme.colors.primary}80`,
-                        color: theme.colors.primary,
-                      } : {
-                        backgroundColor: theme.colors.background,
-                        borderColor: theme.colors.border,
-                        color: theme.colors.text,
-                      }}
-                    >
-                      Stripe
-                    </button>
+                  <div className="grid grid-cols-3 gap-2">
+                    {(['esewa', 'ime_pay', 'stripe'] as const).map((gw) => (
+                      <button
+                        key={gw}
+                        onClick={() => setPurchaseGateway(gw)}
+                        className="p-2 rounded-lg border transition-all text-sm"
+                        style={purchaseGateway === gw ? {
+                          backgroundColor: `${theme.colors.primary}33`,
+                          borderColor: `${theme.colors.primary}80`,
+                          color: theme.colors.primary,
+                        } : {
+                          backgroundColor: theme.colors.background,
+                          borderColor: theme.colors.border,
+                          color: theme.colors.text,
+                        }}
+                      >
+                        {gw === 'esewa' ? 'eSewa' : gw === 'ime_pay' ? 'IME Pay' : 'Stripe'}
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="rounded-lg border p-4" style={{ backgroundColor: theme.colors.background, borderColor: theme.colors.border }}>
-                  <div className="flex justify-between items-center mb-2">
-                    <span style={{ color: theme.colors.textSecondary }}>Price</span>
-                    <span className="text-xl font-bold" style={{ color: theme.colors.text }}>
-                      {selectedApp.price === 0
-                        ? 'Free'
-                        : purchaseGateway === 'esewa'
-                          ? formatCurrency(convertUSDToNPR(selectedApp.price), 'NPR')
-                          : formatCurrency(selectedApp.price, 'USD')}
-                    </span>
-                  </div>
-                  {selectedApp.price > 0 && (
-                    <div className="text-sm" style={{ color: theme.colors.textSecondary }}>
-                      {purchaseGateway === 'esewa' && (
-                        <span className="block">≈ {formatCurrency(selectedApp.price, 'USD')} USD</span>
-                      )}
-                      {purchaseGateway === 'stripe' && (
-                        <span className="block">≈ {formatCurrency(convertUSDToNPR(selectedApp.price), 'NPR')} NPR</span>
-                      )}
-                      Billed {purchaseBillingPeriod === 'monthly' ? 'monthly' : 'annually'}
-                    </div>
-                  )}
+                <div className="rounded-lg border p-4 space-y-1" style={{ backgroundColor: theme.colors.background, borderColor: theme.colors.border }}>
+                  {selectedApp.price === 0 ? (
+                    <div className="text-xl font-bold" style={{ color: theme.colors.text }}>Free</div>
+                  ) : (() => {
+                    const modalPrice = getModalPrice(selectedApp.price);
+                    const isNpr = purchaseGateway === 'esewa' || purchaseGateway === 'ime_pay';
+                    const displayPrice = isNpr ? convertUSDToNPR(modalPrice) : modalPrice;
+                    const currency = isNpr ? 'NPR' : 'USD';
+                    return (
+                      <>
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm" style={{ color: theme.colors.textSecondary }}>
+                            Base ({purchaseBillingPeriod === 'yearly' ? '12 months' : '1 month'})
+                          </span>
+                          <span className="font-semibold" style={{ color: theme.colors.text }}>
+                            {formatCurrency(isNpr ? convertUSDToNPR(selectedApp.price * (purchaseBillingPeriod === 'yearly' ? 12 : 1)) : selectedApp.price * (purchaseBillingPeriod === 'yearly' ? 12 : 1), currency)}
+                          </span>
+                        </div>
+                        {purchaseBillingPeriod === 'yearly' && (
+                          <div className="flex justify-between items-center text-sm" style={{ color: '#16a34a' }}>
+                            <span>Annual discount (20% off)</span>
+                            <span>-{formatCurrency(isNpr ? convertUSDToNPR(selectedApp.price * 12 * 0.20) : selectedApp.price * 12 * 0.20, currency)}</span>
+                          </div>
+                        )}
+                        {hasBundleDiscount && (
+                          <div className="flex justify-between items-center text-sm" style={{ color: '#16a34a' }}>
+                            <span>Bundle discount (15% off)</span>
+                            <span>-{formatCurrency(isNpr ? convertUSDToNPR(selectedApp.price * (purchaseBillingPeriod === 'yearly' ? 12 * 0.80 : 1) * 0.15) : selectedApp.price * (purchaseBillingPeriod === 'yearly' ? 12 * 0.80 : 1) * 0.15, currency)}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between items-center pt-1 border-t" style={{ borderColor: theme.colors.border }}>
+                          <span className="font-semibold" style={{ color: theme.colors.textSecondary }}>Total</span>
+                          <span className="text-xl font-bold" style={{ color: theme.colors.text }}>
+                            {formatCurrency(displayPrice, currency)}
+                          </span>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
 
                 <div>

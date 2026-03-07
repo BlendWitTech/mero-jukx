@@ -41,12 +41,16 @@ import { MeroCrmModule } from '../marketplace/organization/mero-crm/src/mero-crm
 import { MeroSocialModule } from '../marketplace/shared/mero-social/mero-social.module';
 import { MeroInventoryModule } from '../marketplace/organization/mero-inventory/mero-inventory.module';
 import { MeroAccountingModule } from '../marketplace/organization/mero-accounting/mero-accounting.module';
+import { MeroKhataModule } from '../marketplace/organization/mero-khata/mero-khata.module';
+import { MeroHrModule } from '../marketplace/organization/mero-hr/mero-hr.module';
+import { MeroCmsModule } from '../marketplace/organization/mero-cms/mero-cms.module';
 import { CreatorPortalModule } from '../marketplace/creator/portal/creator-portal.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
 import { BoardsModule } from './boards/boards.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TasksModule } from './tasks/tasks.module';
+import { WorkflowsModule } from './workflows/workflows.module';
 
 @Module({
   imports: [
@@ -107,12 +111,16 @@ import { TasksModule } from './tasks/tasks.module';
     MeroSocialModule,
     MeroInventoryModule,
     MeroAccountingModule,
+    MeroKhataModule,
+    MeroHrModule,
+    MeroCmsModule,
     CreatorPortalModule,
     AnnouncementsModule,
     BoardsModule,
     WorkspacesModule,
     ProjectsModule,
     TasksModule,
+    WorkflowsModule,
   ],
   controllers: [AppController],
   providers: [

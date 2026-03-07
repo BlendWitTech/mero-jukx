@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 import toast from '@shared/hooks/useToast';
-import { CheckCircle, XCircle, Loader2, Shield, Sparkles, Mail } from 'lucide-react';
+import { CheckCircle, XCircle, Loader2, Shield, Sparkles, Mail, RefreshCw } from 'lucide-react';
 
 export default function VerifyEmailPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [resendEmail, setResendEmail] = useState('');
+  const [resendSent, setResendSent] = useState(false);
+  const [resendLoading, setResendLoading] = useState(false);
   const [message, setMessage] = useState<string>('');
   const token = searchParams.get('token');
 
@@ -91,6 +94,23 @@ export default function VerifyEmailPage() {
       isMounted = false;
     };
   }, [token, navigate]);
+
+  const handleResend = async () => {
+    if (!resendEmail.trim()) {
+      toast.error('Please enter your email address');
+      return;
+    }
+    setResendLoading(true);
+    try {
+      await authService.resendVerification(resendEmail.trim());
+      setResendSent(true);
+      toast.success('Verification email sent! Check your inbox.');
+    } catch {
+      toast.error('Failed to resend verification email. Please try again.');
+    } finally {
+      setResendLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
@@ -203,24 +223,44 @@ export default function VerifyEmailPage() {
                 </div>
               </div>
               <h2 className="text-2xl font-bold text-white mb-2">Verification Failed</h2>
-              <p className="text-[#b9bbbe] mb-6">{message}</p>
-              <div className="bg-[#ed4245]/10 border border-[#ed4245]/20 rounded-lg p-4 mb-6">
-                <p className="text-sm text-[#ed4245]">
-                  ⚠️ The verification link is invalid or has expired. Please request a new verification email.
-                </p>
-              </div>
+              <p className="text-[#b9bbbe] mb-4">{message}</p>
+
+              {/* Resend verification form */}
+              {!resendSent ? (
+                <div className="bg-[#2f3136] border border-[#4752c4]/40 rounded-xl p-4 mb-4 text-left">
+                  <p className="text-sm text-[#b9bbbe] mb-3 font-medium">
+                    <RefreshCw className="inline h-3.5 w-3.5 mr-1" />
+                    Get a new verification link
+                  </p>
+                  <input
+                    type="email"
+                    value={resendEmail}
+                    onChange={(e) => setResendEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                    className="w-full px-3 py-2 rounded-lg bg-[#202225] border border-[#4e5058] text-white text-sm placeholder-[#6d6f78] mb-2 focus:outline-none focus:border-[#5865f2]"
+                  />
+                  <button
+                    onClick={handleResend}
+                    disabled={resendLoading}
+                    className="w-full py-2 rounded-lg text-sm font-semibold transition-all bg-[#5865f2] hover:bg-[#4752c4] text-white disabled:opacity-50"
+                  >
+                    {resendLoading ? 'Sending...' : 'Resend Verification Email'}
+                  </button>
+                </div>
+              ) : (
+                <div className="bg-[#23a55a]/10 border border-[#23a55a]/30 rounded-xl p-4 mb-4">
+                  <p className="text-sm text-[#23a55a]">
+                    ✅ Verification email sent! Check your inbox and spam folder.
+                  </p>
+                </div>
+              )}
+
               <div className="space-y-3">
                 <button
                   onClick={() => navigate('/login')}
-                  className="w-full py-3 rounded-xl font-semibold transition-all bg-[#5865f2] hover:bg-[#4752c4] text-white"
-                >
-                  Go to Login
-                </button>
-                <button
-                  onClick={() => navigate('/register')}
                   className="w-full py-3 rounded-xl font-semibold transition-all bg-[#393c43] hover:bg-[#404249] text-white"
                 >
-                  Register Again
+                  Go to Login
                 </button>
               </div>
             </>

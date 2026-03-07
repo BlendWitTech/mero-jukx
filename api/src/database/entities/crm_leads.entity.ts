@@ -47,6 +47,15 @@ export class CrmLead {
     @Column({ length: 100, nullable: true })
     job_title: string;
 
+    @Column({ length: 100, nullable: true })
+    country: string;
+
+    @Column({ length: 100, nullable: true })
+    city: string;
+
+    @Column({ length: 100, nullable: true })
+    territory: string;
+
     @Column({
         type: 'enum',
         enum: ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION', 'WON', 'LOST'],
@@ -59,6 +68,15 @@ export class CrmLead {
 
     @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
     estimated_value: number;
+
+    @Column({ type: 'int', default: 0 })
+    score: number;
+
+    @Column({ type: 'jsonb', nullable: true })
+    tags: string[];
+
+    @Column({ type: 'text', nullable: true })
+    win_loss_reason: string;
 
     @Column({ name: 'assigned_to', type: 'uuid', nullable: true })
     assignedToId: string;

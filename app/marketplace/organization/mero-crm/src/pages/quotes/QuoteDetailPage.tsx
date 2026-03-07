@@ -3,9 +3,38 @@ import { useTheme } from '@frontend/contexts/ThemeContext';
 import { useNavigate, useParams } from 'react-router-dom';
 import { quotesApi, Quote } from '../../api/quotes';
 import { Card, Button, Badge } from '@shared';
-import { ArrowLeft, Edit, Trash2, FileText, Calendar, DollarSign, FileCheck, Send, Download } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, FileText, Calendar, DollarSign, FileCheck, Send, Download, Printer } from 'lucide-react';
 import { toast } from '@shared';
 import { useAppContext } from '../../contexts/AppContext';
+import SendEmailModal from '../../components/SendEmailModal';
+
+const PRINT_STYLES = `
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+    .print-content, .print-content * {
+      visibility: visible;
+    }
+    .print-content {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      padding: 0 !important;
+      margin: 0 !important;
+      background: white !important;
+      color: black !important;
+      box-shadow: none !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+    @page {
+      margin: 2cm;
+    }
+  }
+`;
 
 export default function QuoteDetailPage() {
     const { theme } = useTheme();
@@ -14,12 +43,16 @@ export default function QuoteDetailPage() {
     const { id } = useParams<{ id: string }>();
     const [quote, setQuote] = useState<Quote | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
 
     useEffect(() => {
-        if (id) {
-            fetchQuote();
-        }
-    }, [id]);
+        const style = document.createElement('style');
+        style.appendChild(document.createTextNode(PRINT_STYLES));
+        document.head.appendChild(style);
+        return () => {
+            document.head.removeChild(style);
+        };
+    }, []);
 
     const fetchQuote = async () => {
         if (!id) return;
@@ -35,6 +68,20 @@ export default function QuoteDetailPage() {
         }
     };
 
+    const handleConvertToInvoice = async () => {
+        if (!id) return;
+        try {
+            setLoading(true);
+            const result = await quotesApi.convertToInvoice(id);
+            toast.success('Quote converted to Invoice successfully!');
+            navigate(buildHref(`/invoices/${result.invoiceId}`));
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to convert quote to invoice');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const handleDelete = async () => {
         if (!id || !confirm('Are you sure you want to delete this quote?')) return;
         try {
@@ -44,6 +91,21 @@ export default function QuoteDetailPage() {
         } catch (error: any) {
             toast.error('Failed to delete quote');
         }
+    };
+
+    const handleSendEmail = async (data: { to: string; subject: string; message: string }) => {
+        if (!id) return;
+        try {
+            await quotesApi.sendEmail(id, data);
+            toast.success('Quote sent to client successfully!');
+        } catch (error: any) {
+            toast.error(error.response?.data?.message || 'Failed to send email');
+            throw error;
+        }
+    };
+
+    const handlePrint = () => {
+        window.print();
     };
 
     const getStatusBadge = (status: Quote['status']) => {
@@ -86,7 +148,7 @@ export default function QuoteDetailPage() {
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3 no-print">
                     <Button variant="secondary" onClick={() => navigate(buildHref(`/quotes/${id}/edit`))} className="rounded-xl px-5 h-11">
                         <Edit className="h-4 w-4 mr-2" />
                         Edit
@@ -96,7 +158,12 @@ export default function QuoteDetailPage() {
                         Delete
                     </Button>
                     <div className="w-px h-8 bg-border hidden md:block mx-1" style={{ backgroundColor: theme.colors.border }} />
-                    <Button variant="primary" className="rounded-xl px-6 h-11 shadow-lg shadow-primary/20 bg-emerald-600 hover:bg-emerald-700 border-none">
+                    <Button
+                        variant="primary"
+                        className="rounded-xl px-6 h-11 shadow-lg shadow-primary/20 bg-primary hover:primary border-none"
+                        onClick={handleConvertToInvoice}
+                        disabled={loading || quote.status === 'cancelled'}
+                    >
                         <FileCheck className="h-4 w-4 mr-2" />
                         Convert to Invoice
                     </Button>
@@ -105,7 +172,7 @@ export default function QuoteDetailPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Document View */}
-                <Card className="lg:col-span-2 p-10 border-none shadow-2xl shadow-black/5 min-h-[800px] flex flex-col" style={{ backgroundColor: theme.colors.surface, borderRadius: '32px' }}>
+                <Card className="lg:col-span-2 p-10 border-none shadow-2xl shadow-black/5 min-h-[800px] flex flex-col print-content" style={{ backgroundColor: theme.colors.surface, borderRadius: '32px' }}>
                     {/* Brand/Top Header */}
                     <div className="flex justify-between items-start mb-16">
                         <div>
@@ -134,9 +201,7 @@ export default function QuoteDetailPage() {
                             <p className="text-xs uppercase font-bold opacity-40 mb-3 tracking-widest">To</p>
                             <p className="font-bold text-lg">{quote.client?.name}</p>
                             <p className="opacity-60 text-sm leading-relaxed">
-                                {quote.client?.email}<br />
-                                {quote.client?.phone}<br />
-                                {quote.client?.address}
+                                {quote.client?.email}
                             </p>
                         </div>
                     </div>
@@ -198,17 +263,25 @@ export default function QuoteDetailPage() {
                 </Card>
 
                 {/* Sidebar Actions/Info */}
-                <div className="space-y-6">
+                <div className="space-y-6 no-print">
                     <Card className="p-8 border-none shadow-xl shadow-black/5" style={{ backgroundColor: theme.colors.surface, borderRadius: '24px' }}>
                         <h3 className="text-xl font-bold mb-6">Actions</h3>
                         <div className="space-y-4">
-                            <Button variant="secondary" className="w-full h-12 rounded-xl justify-start px-4">
-                                <Send className="h-4 w-4 mr-3" />
+                            <Button
+                                variant="secondary"
+                                className="w-full h-12 rounded-xl justify-start px-4 transition-all hover:bg-primary/10 group"
+                                onClick={() => setIsEmailModalOpen(true)}
+                            >
+                                <Send className="h-4 w-4 mr-3 group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />
                                 Send to Client
                             </Button>
-                            <Button variant="secondary" className="w-full h-12 rounded-xl justify-start px-4">
-                                <Download className="h-4 w-4 mr-3" />
-                                Download PDF
+                            <Button
+                                variant="secondary"
+                                className="w-full h-12 rounded-xl justify-start px-4 transition-all hover:bg-primary/10 group"
+                                onClick={handlePrint}
+                            >
+                                <Printer className="h-4 w-4 mr-3 group-hover:scale-110 transition-transform" />
+                                Print / Save as PDF
                             </Button>
                         </div>
                     </Card>
@@ -241,6 +314,18 @@ export default function QuoteDetailPage() {
                     </Card>
                 </div>
             </div>
+
+            <SendEmailModal
+                isOpen={isEmailModalOpen}
+                onClose={() => setIsEmailModalOpen(false)}
+                onSend={handleSendEmail}
+                title="Send Quote to Client"
+                initialData={{
+                    to: quote.client?.email || '',
+                    subject: `Quote #${quote.number}/${quote.year} - Mero CRM`,
+                    message: `Please find our quote #${quote.number}/${quote.year} attached for your review. We look forward to your feedback.`,
+                }}
+            />
         </div>
     );
 }

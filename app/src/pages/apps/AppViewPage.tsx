@@ -25,6 +25,9 @@ const MeroCrmRouter = lazy(() => import('@crm/MeroCrmRouter'));
 const MeroSocialRouter = lazy(() => import('@apps/mero-social/MeroSocialRouter'));
 const MeroInventoryRouter = lazy(() => import('@inventory/MeroInventoryRouter'));
 const MeroAccountingRouter = lazy(() => import('@accounting/MeroAccountingRouter'));
+const MeroKhataRouter = lazy(() => import('@khata/MeroKhataRouter'));
+const MeroHrRouter = lazy(() => import('@hr/MeroHrRouter'));
+const MeroCmsRouter = lazy(() => import('@cms/MeroCmsRouter'));
 
 
 
@@ -50,18 +53,23 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
     queryFn: async () => {
       if (!appSlug) throw new Error('Invalid app slug');
 
-      // System-admin should be fetched directly, not from marketplace
-
-      // Try to fetch by slug first, fallback to ID if needed
+      // Try to fetch by slug first
       try {
         const response = await api.get(`/marketplace/apps/slug/${appSlug}`);
-        return response.data;
+        const appData = response.data;
+        if (appData?.id) {
+          localStorage.setItem('last_opened_app_id', appData.id.toString());
+        }
+        return appData;
       } catch (err: any) {
-        // If slug endpoint doesn't exist, fetch all apps and find by slug
+        // Fallback: fetch all and find by slug
         const response = await api.get('/marketplace/apps');
         const apps = response.data.data || response.data || [];
         const foundApp = apps.find((a: any) => a.slug === appSlug);
         if (!foundApp) throw new Error('App not found');
+        if (foundApp.id) {
+          localStorage.setItem('last_opened_app_id', foundApp.id.toString());
+        }
         return foundApp;
       }
     },
@@ -75,19 +83,25 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
   useEffect(() => {
     if (!appIdNum) return;
 
+    // Set last opened app ID for API interceptor
+    localStorage.setItem('last_opened_app_id', appIdNum.toString());
+
     // Clean up expired sessions
     const token = getAppSession(appIdNum);
     if (token && isAppSessionValid(appIdNum)) {
       setHasAppSession(true);
       setNeedsReauth(false);
       updateAppActivity(appIdNum);
-      // Set token in API headers
-      api.defaults.headers.common['X-App-Session'] = token;
+
+      // Ensure app is in taskbar if session is valid
+      if (app) {
+        syncTaskbarApps(appIdNum, app);
+      }
     } else {
       setHasAppSession(false);
       removeAppSession(appIdNum);
     }
-  }, [appIdNum]);
+  }, [appIdNum, app]);
 
   // Track user activity in the app (mouse movements, clicks, keyboard)
   useEffect(() => {
@@ -151,8 +165,7 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
         if (token) {
           setHasAppSession(true);
           setNeedsReauth(false);
-          updateAppActivity(appIdNum);
-          api.defaults.headers.common['X-App-Session'] = token;
+          // Token is now handled by API interceptor dynamically based on URL
         } else {
           setHasAppSession(false);
           setNeedsReauth(true);
@@ -160,6 +173,41 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
       }
     }
   }, [appIdNum, hasAccess, isLoading]);
+
+  // Helper to sync app with taskbar_apps
+  const syncTaskbarApps = (id: number, appInfo: any) => {
+    if (!id || !appInfo) return;
+
+    try {
+      const storedApps = localStorage.getItem('taskbar_apps');
+      const apps: any[] = storedApps ? JSON.parse(storedApps) : [];
+      const appExistsIndex = apps.findIndex(a => a.id === id);
+
+      if (appExistsIndex === -1) {
+        apps.push({
+          id,
+          name: appInfo.name,
+          slug: appInfo.slug,
+          icon: appInfo.icon_url,
+          isMinimized: false,
+          isPinned: false
+        });
+        localStorage.setItem('taskbar_apps', JSON.stringify(apps));
+      } else {
+        const updated = [...apps];
+        updated[appExistsIndex] = {
+          ...updated[appExistsIndex],
+          name: appInfo.name,
+          slug: appInfo.slug,
+          icon: appInfo.icon_url,
+          isMinimized: false
+        };
+        localStorage.setItem('taskbar_apps', JSON.stringify(updated));
+      }
+    } catch (e) {
+      console.error('Error syncing taskbar_apps:', e);
+    }
+  };
 
   // Record app usage and add to taskbar when app is opened
   // Only add if app has an active session (not just when component mounts)
@@ -169,44 +217,24 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
 
       // Check if app session is actually valid before adding to taskbar
       if (isAppSessionValid(appIdNum)) {
-        // Add app to taskbar only if it doesn't exist or needs update
-        const storedApps = localStorage.getItem('taskbar_apps');
-        const apps: any[] = storedApps ? JSON.parse(storedApps) : [];
-        const appExists = apps.find(a => a.id === appIdNum);
-
-        if (!appExists) {
-          // Only add if app doesn't exist in taskbar
-          apps.push({
-            id: appIdNum,
-            name: app.name,
-            slug: app.slug,
-            icon: app.icon_url,
-            isMinimized: false,
-            isPinned: false
-          });
-          localStorage.setItem('taskbar_apps', JSON.stringify(apps));
-        } else {
-          // Update app info if it exists and restore from minimized if needed
-          const updated = apps.map(a =>
-            a.id === appIdNum
-              ? { ...a, name: app.name, slug: app.slug, icon: app.icon_url, isMinimized: false }
-              : a
-          );
-          localStorage.setItem('taskbar_apps', JSON.stringify(updated));
-        }
+        syncTaskbarApps(appIdNum, app);
       }
     }
   }, [appIdNum, hasAppSession, app]);
 
   // Handler functions (must be defined before early returns)
   const handleAuthSuccess = (token: string) => {
-    if (appIdNum && token) {
+    if (appIdNum && token && app) {
+      // Set last opened app ID for API interceptor
+      localStorage.setItem('last_opened_app_id', appIdNum.toString());
+
+      // Synchronously update taskbar_apps before setting state to avoid race condition in interceptor
+      syncTaskbarApps(appIdNum, app);
+
       setAppSession(appIdNum, token);
       setHasAppSession(true);
       setNeedsReauth(false);
       updateAppActivity(appIdNum);
-      // Add token to API headers for subsequent requests
-      api.defaults.headers.common['X-App-Session'] = token;
       // App is now authenticated and will automatically load
     }
   };
@@ -296,7 +324,6 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
 
       setHasAppSession(false);
       setNeedsReauth(true);
-      delete api.defaults.headers.common['X-App-Session'];
     }
   };
 
@@ -474,6 +501,34 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
     );
   }
 
+  if (app?.slug === 'mero-khata' && hasAppSession) {
+    return (
+      <>
+        <div className="h-full w-full flex flex-col overflow-hidden" style={{ backgroundColor: theme.colors.background }}>
+          <div className="flex-1 overflow-hidden">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.primary }} />
+              </div>
+            }>
+              <MeroKhataRouter appSlug={appSlug!} />
+            </Suspense>
+          </div>
+        </div>
+        <ConfirmDialog
+          isOpen={showCloseConfirm}
+          onClose={handleCancelClose}
+          onConfirm={handleConfirmClose}
+          title="Close App"
+          message={`Are you sure you want to close "${app.name}"? This will remove the app from the taskbar.`}
+          confirmText="Close"
+          cancelText="Cancel"
+          variant="warning"
+        />
+      </>
+    );
+  }
+
   if (app?.slug === 'mero-accounting' && hasAppSession) {
     return (
       <>
@@ -485,6 +540,62 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
               </div>
             }>
               <MeroAccountingRouter appSlug={appSlug!} />
+            </Suspense>
+          </div>
+        </div>
+        <ConfirmDialog
+          isOpen={showCloseConfirm}
+          onClose={handleCancelClose}
+          onConfirm={handleConfirmClose}
+          title="Close App"
+          message={`Are you sure you want to close "${app.name}"? This will remove the app from the taskbar.`}
+          confirmText="Close"
+          cancelText="Cancel"
+          variant="warning"
+        />
+      </>
+    );
+  }
+
+  if (app?.slug === 'mero-hr' && hasAppSession) {
+    return (
+      <>
+        <div className="h-full w-full flex flex-col overflow-hidden" style={{ backgroundColor: theme.colors.background }}>
+          <div className="flex-1 overflow-hidden">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.primary }} />
+              </div>
+            }>
+              <MeroHrRouter appSlug={appSlug!} />
+            </Suspense>
+          </div>
+        </div>
+        <ConfirmDialog
+          isOpen={showCloseConfirm}
+          onClose={handleCancelClose}
+          onConfirm={handleConfirmClose}
+          title="Close App"
+          message={`Are you sure you want to close "${app.name}"? This will remove the app from the taskbar.`}
+          confirmText="Close"
+          cancelText="Cancel"
+          variant="warning"
+        />
+      </>
+    );
+  }
+
+  if (app?.slug === 'mero-cms' && hasAppSession) {
+    return (
+      <>
+        <div className="h-full w-full flex flex-col overflow-hidden" style={{ backgroundColor: theme.colors.background }}>
+          <div className="flex-1 overflow-hidden">
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full">
+                <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.primary }} />
+              </div>
+            }>
+              <MeroCmsRouter appSlug={appSlug!} />
             </Suspense>
           </div>
         </div>

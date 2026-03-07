@@ -2,17 +2,23 @@ const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
-// Bootstrap: Install dependencies if inquirer is missing
-try {
-    require.resolve('inquirer');
-} catch (e) {
+const inquirerPath = path.join(__dirname, '..', 'node_modules', 'inquirer');
+const dependencyExists = fs.existsSync(inquirerPath);
+
+if (!dependencyExists) {
     console.log('Installing setup dependencies...');
     // Install in the root where package.json is
-    spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
+    const result = spawnSync('npm', ['install', '--no-audit', '--no-fund'], {
         stdio: 'inherit',
         cwd: path.join(__dirname, '..'),
         shell: true
     });
+
+    if (result.status !== 0) {
+        console.error('\x1b[31m%s\x1b[0m', 'Failed to install dependencies automatically.');
+        console.error('Please run "npm install" manually and then try running "npm run setup" again.');
+        process.exit(1);
+    }
 }
 
 const isWindows = process.platform === 'win32';

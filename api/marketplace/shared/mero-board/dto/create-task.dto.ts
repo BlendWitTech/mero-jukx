@@ -27,6 +27,11 @@ export class CreateTaskDto {
   @IsUUID()
   assignee_id?: string;
 
+  @ApiPropertyOptional({ description: 'Parent Task ID' })
+  @IsOptional()
+  @IsUUID()
+  parent_task_id?: string;
+
   @ApiPropertyOptional({ description: 'Due date' })
   @IsOptional()
   @IsDateString()
@@ -43,6 +48,16 @@ export class CreateTaskDto {
   @IsArray()
   @IsString({ each: true })
   tags?: string[];
+
+  @ApiPropertyOptional({ description: 'Board ID' })
+  @IsOptional()
+  @IsUUID()
+  board_id?: string;
+
+  @ApiPropertyOptional({ description: 'Column ID' })
+  @IsOptional()
+  @IsUUID()
+  column_id?: string;
 
   @ApiPropertyOptional({ description: 'Sort order' })
   @IsOptional()

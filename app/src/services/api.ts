@@ -7,12 +7,9 @@ import { logger } from '../utils/logger';
 const getApiBaseUrl = () => {
   const viteApiUrl = import.meta.env.VITE_API_URL;
   if (viteApiUrl) {
-    // If VITE_API_URL is set, use it (it should already include /api/v1)
-    // Remove trailing slash if present
-    return viteApiUrl.endsWith('/') ? viteApiUrl.slice(0, -1) : viteApiUrl;
+    return viteApiUrl.endsWith('/') ? viteApiUrl : `${viteApiUrl}/`;
   }
-  // If not set, use relative URL (will use Vite proxy)
-  return '/api/v1';
+  return '/api/v1/';
 };
 
 const api = axios.create({
@@ -37,7 +34,7 @@ const processQueue = (error: any, token: string | null = null) => {
       prom.resolve(token);
     }
   });
-  
+
   failedQueue = [];
 };
 
@@ -46,13 +43,13 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const authStore = useAuthStore.getState();
     const token = authStore.accessToken;
-    
+
     // Skip adding Authorization header for MFA setup endpoints
     // These endpoints use temp_setup_token in headers instead
-    const isMfaSetupEndpoint = config.url?.includes('/mfa/setup') || 
-                               config.url?.includes('mfa/setup') ||
-                               (config.baseURL && config.url && `${config.baseURL}${config.url}`.includes('/mfa/setup'));
-    
+    const isMfaSetupEndpoint = config.url?.includes('/mfa/setup') ||
+      config.url?.includes('mfa/setup') ||
+      (config.baseURL && config.url && `${config.baseURL}${config.url}`.includes('/mfa/setup'));
+
     // Don't add Authorization header for MFA setup endpoints
     // They use X-MFA-Setup-Token header instead
     if (isMfaSetupEndpoint && config.headers) {
@@ -70,23 +67,60 @@ api.interceptors.request.use(
     // Check for both old /apps/:id and new /app/:slug patterns
     const appIdMatch = url.match(/\/apps\/(\d+)/) || pathname.match(/\/apps\/(\d+)/);
     const appSlugMatch = url.match(/\/app\/([^/]+)/) || pathname.match(/\/app\/([^/]+)/);
-    
+
     // Also check if the request is to boards endpoints while in app context
     const isBoardsRequest = url.includes('/boards/') || url.includes('/workspaces/') || url.includes('/projects/');
     const isInAppContext = pathname.includes('/apps/') || pathname.includes('/app/');
-    
-    if ((appIdMatch || (isBoardsRequest && isInAppContext)) && config.headers) {
+
+    if ((appIdMatch || appSlugMatch || (isBoardsRequest && isInAppContext)) && config.headers) {
       let appId: number | null = null;
-      if (appIdMatch) {
+
+      // Try to get appId from last_opened_app_id fallback first (most reliable during transitions)
+      const lastId = localStorage.getItem('last_opened_app_id');
+      if (lastId) {
+        appId = parseInt(lastId, 10);
+      }
+
+      if (!appId && appIdMatch) {
         appId = parseInt(appIdMatch[1], 10);
-      } else if (isInAppContext) {
+      } else if (!appId && appSlugMatch) {
+        // Find appId from taskbar_apps using slug
+        try {
+          const storedApps = localStorage.getItem('taskbar_apps');
+          if (storedApps) {
+            const apps: any[] = JSON.parse(storedApps);
+            const app = apps.find(a => a.slug === appSlugMatch[1]);
+            if (app?.id) {
+              appId = app.id;
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing taskbar_apps in API interceptor:', e);
+        }
+      } else if (!appId && isInAppContext) {
         // Extract app ID from pathname
         const pathMatch = pathname.match(/\/apps\/(\d+)/);
         if (pathMatch) {
           appId = parseInt(pathMatch[1], 10);
+        } else {
+          // Try to extract slug and find ID
+          const slugMatch = pathname.match(/\/app\/([^/]+)/);
+          if (slugMatch) {
+            const targetSlug = slugMatch[1];
+            try {
+              const storedApps = localStorage.getItem('taskbar_apps');
+              if (storedApps) {
+                const apps: any[] = JSON.parse(storedApps);
+                const app = apps.find(a => a.slug === targetSlug);
+                if (app?.id) {
+                  appId = app.id;
+                }
+              }
+            } catch (e) { }
+          }
         }
       }
-      
+
       if (appId) {
         // Try to get per-app session token
         try {
@@ -99,15 +133,13 @@ api.interceptors.request.use(
             const now = Date.now();
             const lastActivity = activityStr ? parseInt(activityStr, 10) : null;
             const SESSION_TIMEOUT = 15 * 60 * 1000; // 15 minutes
-            
+
             if (lastActivity && (now - lastActivity) <= SESSION_TIMEOUT) {
               // Session is valid - add X-App-Session header
-              // Note: Boards endpoints still need the regular JWT token in Authorization header
-              // The X-App-Session is just for app access verification
               config.headers['X-App-Session'] = sessionData.token;
             }
           } else {
-            // Fallback to legacy token
+            // Fallback to legacy token if no per-app session
             const appSessionToken = localStorage.getItem('app_session_token');
             if (appSessionToken) {
               config.headers['X-App-Session'] = appSessionToken;
@@ -143,19 +175,21 @@ api.interceptors.response.use(
     if (error.response) {
       const status = error.response.status;
       if (
-        (status === 404 && url.includes('/announcements/active')) ||
-        (status === 403 && url.includes('/chats'))
+        (status === 404 && (url.includes('/announcements/active') || url.includes('/marketplace/apps/slug/'))) ||
+        (status === 403 && url.includes('/chats')) ||
+        (status === 401 && (url.includes('/auth/check-mfa-required') || url.includes('/auth/refresh')))
       ) {
         // Silently reject these expected errors without logging
         return Promise.reject(error);
       }
     }
 
+
     // Skip refresh logic for auth endpoints (login, refresh, register) and MFA setup endpoints
-    const isAuthEndpoint = originalRequest.url?.includes('/auth/login') || 
-                          originalRequest.url?.includes('/auth/refresh') ||
-                          originalRequest.url?.includes('/auth/organization/register');
-    
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/login') ||
+      originalRequest.url?.includes('/auth/refresh') ||
+      originalRequest.url?.includes('/auth/organization/register');
+
     // Skip refresh logic for MFA setup endpoints (they use temp_setup_token)
     const isMfaSetupEndpoint = originalRequest.url?.includes('/mfa/setup');
 
@@ -227,7 +261,7 @@ api.interceptors.response.use(
         // Try to refresh the token (use plain axios to avoid interceptor loop)
         // Use the same baseURL as the api instance
         const baseUrl = api.defaults.baseURL || '/api/v1';
-        const refreshUrl = baseUrl.endsWith('/') 
+        const refreshUrl = baseUrl.endsWith('/')
           ? `${baseUrl}auth/refresh`
           : `${baseUrl}/auth/refresh`;
         const response = await axios.post(refreshUrl, {
@@ -239,12 +273,12 @@ api.interceptors.response.use(
         });
 
         const { access_token } = response.data;
-        
+
         logger.log('[Token Refresh] Token refreshed successfully', {
           hasNewAccessToken: !!access_token,
           newTokenLength: access_token?.length || 0,
         });
-        
+
         if (!access_token) {
           throw new Error('No access token received from refresh endpoint');
         }
@@ -274,16 +308,16 @@ api.interceptors.response.use(
         // Refresh failed, process queue with error and logout
         isRefreshing = false;
         processQueue(refreshError, null);
-        
+
         const authStore = useAuthStore.getState();
         const currentPath = window.location.pathname;
-        const isAuthPage = currentPath === '/login' || currentPath === '/register' || 
-                          currentPath.startsWith('/verify-email') || 
-                          currentPath.startsWith('/reset-password') ||
-                          currentPath.startsWith('/forgot-password') || 
-                          currentPath.startsWith('/accept-invitation') || 
-                          currentPath === '/mfa/setup';
-        
+        const isAuthPage = currentPath === '/login' || currentPath === '/register' ||
+          currentPath.startsWith('/verify-email') ||
+          currentPath.startsWith('/reset-password') ||
+          currentPath.startsWith('/forgot-password') ||
+          currentPath.startsWith('/accept-invitation') ||
+          currentPath === '/mfa/setup';
+
         // Only log error if not already on auth page (to reduce console noise)
         if (!isAuthPage) {
           logger.warn('[Token Refresh] Failed to refresh token - redirecting to login', {
@@ -291,23 +325,23 @@ api.interceptors.response.use(
             message: refreshError?.response?.data?.message || 'Session expired. Please log in again.',
           });
         }
-        
+
         // Clear auth state
         authStore.logout();
-        
+
         // Redirect to login if not already on an auth page
         if (!isAuthPage) {
           // Use replace to avoid adding to history
           window.location.replace('/login');
         }
-        
+
         return Promise.reject(refreshError);
       }
     }
 
     // Handle network/connection errors (no response from server)
     if (!error.response) {
-      const isNetworkError = 
+      const isNetworkError =
         error.message?.includes('Network Error') ||
         error.message?.includes('ERR_CONNECTION_REFUSED') ||
         error.message?.includes('Failed to fetch') ||
@@ -316,12 +350,12 @@ api.interceptors.response.use(
 
       if (isNetworkError) {
         const userFriendlyMessage = 'Unable to connect to the server. Please make sure the backend server is running and try again.';
-        
+
         // Only show toast for non-auth endpoints (auth endpoints handle their own errors)
         if (!isAuthEndpoint && !isMfaSetupEndpoint) {
           toast.error(userFriendlyMessage, { duration: 6000 });
         }
-        
+
         return Promise.reject(error);
       }
     }
@@ -397,23 +431,23 @@ api.interceptors.response.use(
 
       // Skip showing toasts for app access endpoints - they handle their own errors in the component
       // But only skip if it's a 400/403/404 - let 500s and other errors show the default toast
-      if ((url.includes('/apps/') && (url.includes('/access/grant') || url.includes('/access/revoke'))) && 
-          (status === 400 || status === 403 || status === 404)) {
+      if ((url.includes('/apps/') && (url.includes('/access/grant') || url.includes('/access/revoke'))) &&
+        (status === 400 || status === 403 || status === 404)) {
         return Promise.reject(error);
       }
-      
+
       // For 400 errors from app access, don't show generic "server error" - let component handle it
       if (status === 400 && url.includes('/apps/') && (url.includes('/access/grant') || url.includes('/access/revoke'))) {
         return Promise.reject(error);
       }
 
       let errorMessage = (error.response?.data as any)?.message || error.message || 'An error occurred';
-      
+
       // Handle axios default error messages like "Request failed with status code 401"
       if (errorMessage.includes('Request failed with status code')) {
         const statusMatch = errorMessage.match(/status code (\d+)/i);
         const statusCode = statusMatch ? parseInt(statusMatch[1], 10) : null;
-        
+
         // If we have a status code, provide user-friendly message
         if (statusCode === 401) {
           errorMessage = 'Your session has expired. Please log in again.';
@@ -433,33 +467,33 @@ api.interceptors.response.use(
           errorMessage = 'An error occurred. Please try again.';
         }
       }
-      
+
       // Convert technical error messages to user-friendly ones
       // First, remove any technical error codes from the message
       let cleanErrorMessage = errorMessage.replace(/\b(40[0-9]|500|50[0-9])\b/g, '').trim();
       cleanErrorMessage = cleanErrorMessage.replace(/Request failed with status code\s*\d*/gi, '').trim();
       cleanErrorMessage = cleanErrorMessage.replace(/\b(HTTP|Status|Error Code|Status Code)\s*:?\s*/gi, '').trim();
       cleanErrorMessage = cleanErrorMessage || errorMessage; // Fallback to original if cleaning removed everything
-      
+
       let userFriendlyMessage = cleanErrorMessage;
-      
+
       // Role hierarchy errors
-      if (cleanErrorMessage.includes('cannot view users with the same or higher role level') || 
-          cleanErrorMessage.includes('cannot view users with higher role level') ||
-          cleanErrorMessage.includes('You cannot view users with the same or higher role level')) {
+      if (cleanErrorMessage.includes('cannot view users with the same or higher role level') ||
+        cleanErrorMessage.includes('cannot view users with higher role level') ||
+        cleanErrorMessage.includes('You cannot view users with the same or higher role level')) {
         userFriendlyMessage = 'You do not have permission to view this user. You can only view users with lower roles than yours.';
       } else if (cleanErrorMessage.includes('Organization Owner cannot be edited') ||
-                 cleanErrorMessage.includes('Organization Owner cannot be edited by any other user')) {
+        cleanErrorMessage.includes('Organization Owner cannot be edited by any other user')) {
         userFriendlyMessage = 'Organization owners can only edit their own profile. You cannot edit another organization owner\'s profile.';
       } else if (cleanErrorMessage.includes('cannot edit users with the same or higher role level') ||
-                 cleanErrorMessage.includes('cannot edit users with higher role level')) {
+        cleanErrorMessage.includes('cannot edit users with higher role level')) {
         userFriendlyMessage = 'You do not have permission to edit this user. You can only edit users with lower roles than yours.';
       } else if (cleanErrorMessage.includes('cannot revoke access') ||
-                 cleanErrorMessage.includes('cannot revoke access for users')) {
+        cleanErrorMessage.includes('cannot revoke access for users')) {
         userFriendlyMessage = 'You do not have permission to revoke this user\'s access. You can only revoke access for users with lower roles than yours.';
       } else if (cleanErrorMessage.includes('cannot assign roles that are equal to or higher than your own role level') ||
-                 cleanErrorMessage.includes('cannot assign roles') ||
-                 cleanErrorMessage.includes('You can only assign roles with hierarchy level greater than')) {
+        cleanErrorMessage.includes('cannot assign roles') ||
+        cleanErrorMessage.includes('You can only assign roles with hierarchy level greater than')) {
         // Extract role level information if available
         const levelMatch = cleanErrorMessage.match(/Your role level is (\d+), and the selected role level is (\d+)/);
         if (levelMatch) {
@@ -470,7 +504,7 @@ api.interceptors.response.use(
       } else if (cleanErrorMessage.includes('Chat feature is not available')) {
         userFriendlyMessage = cleanErrorMessage; // Already user-friendly
       } else if (cleanErrorMessage.includes('do not have permission') ||
-                 cleanErrorMessage.includes('Insufficient permissions')) {
+        cleanErrorMessage.includes('Insufficient permissions')) {
         userFriendlyMessage = cleanErrorMessage; // Already user-friendly
       } else if (cleanErrorMessage.includes('not found') || cleanErrorMessage.includes('does not exist')) {
         userFriendlyMessage = 'The requested resource was not found.';
@@ -495,14 +529,14 @@ api.interceptors.response.use(
         userFriendlyMessage = cleanErrorMessage || 'Invalid request. Please check your input and try again.';
       } else if (status === 409) {
         // Conflict errors - provide specific messages based on context
-        if (cleanErrorMessage.includes('Organization name already exists') || 
-            cleanErrorMessage.includes('Organization name is already taken')) {
+        if (cleanErrorMessage.includes('Organization name already exists') ||
+          cleanErrorMessage.includes('Organization name is already taken')) {
           userFriendlyMessage = 'This organization name is already taken. Please choose a different name.';
-        } else if (cleanErrorMessage.includes('organization email') || 
-                   cleanErrorMessage.includes('email address is already used as an organization email')) {
+        } else if (cleanErrorMessage.includes('organization email') ||
+          cleanErrorMessage.includes('email address is already used as an organization email')) {
           userFriendlyMessage = 'This email address is already registered as an organization email. Please use a different email address.';
         } else if (cleanErrorMessage.includes('User with this email already exists') ||
-                   cleanErrorMessage.includes('Email already exists')) {
+          cleanErrorMessage.includes('Email already exists')) {
           userFriendlyMessage = 'An account with this email address already exists. Please use a different email or sign in if you already have an account.';
         } else if (cleanErrorMessage.includes('already have an organization')) {
           userFriendlyMessage = cleanErrorMessage || 'You already have an organization with this information.';
@@ -520,7 +554,7 @@ api.interceptors.response.use(
       } else if (status >= 500) {
         userFriendlyMessage = 'A server error occurred. Please try again later or contact support if the problem persists.';
       }
-      
+
       // Show toast notification
       toast.error(userFriendlyMessage, { duration: 5000 });
     }

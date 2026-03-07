@@ -35,6 +35,8 @@ import TicketDetailPage from './pages/tickets/TicketDetailPage';
 import AppViewPage from './pages/apps/AppViewPage';
 import ComingSoonPage from './pages/creator/ComingSoonPage';
 import BillingPage from './pages/billing/BillingPage';
+import WorkflowsPage from './pages/workflows/WorkflowsPage';
+import WorkflowBuilderPage from './pages/workflows/WorkflowBuilderPage';
 import CreatorPortalRouter from '@creator/CreatorPortalRouter';
 import { OnboardingProvider } from './components/Onboarding/OnboardingProvider';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -310,7 +312,7 @@ function App() {
             <Route
               path="roles"
               element={
-                <ProtectedRoute requiredPermission="roles.view" featureName="Roles">
+                <ProtectedRoute requiredPermission="roles.view" featureName="Roles" restrictedForBranches={true}>
                   <RolesPage />
                 </ProtectedRoute>
               }
@@ -326,7 +328,7 @@ function App() {
             <Route
               path="packages"
               element={
-                <ProtectedRoute requiredPermission="packages.view" featureName="Packages">
+                <ProtectedRoute requiredPermission="packages.view" featureName="Packages" restrictedForBranches={true}>
                   <PackagesPage />
                 </ProtectedRoute>
               }
@@ -334,7 +336,7 @@ function App() {
             <Route
               path="billing"
               element={
-                <ProtectedRoute requiredPermission="packages.view" featureName="Billing">
+                <ProtectedRoute requiredPermission="packages.view" featureName="Billing" restrictedForBranches={true}>
                   <BillingPage />
                 </ProtectedRoute>
               }
@@ -439,6 +441,30 @@ function App() {
               element={
                 <ProtectedRoute requiredPermission="organizations.view" featureName="Analytics">
                   <AnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="workflows"
+              element={
+                <ProtectedRoute requiredPermission="organizations.view" featureName="Workflows">
+                  <WorkflowsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="workflows/new"
+              element={
+                <ProtectedRoute requiredPermission="organizations.view" featureName="Workflow Builder">
+                  <WorkflowBuilderPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="workflows/:workflowId/edit"
+              element={
+                <ProtectedRoute requiredPermission="organizations.view" featureName="Workflow Builder">
+                  <WorkflowBuilderPage />
                 </ProtectedRoute>
               }
             />

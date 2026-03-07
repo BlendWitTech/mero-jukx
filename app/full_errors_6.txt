@@ -1,2 +1,0 @@
-marketplace/organization/mero-crm/src/layouts/DashboardLayout.tsx(60,36): error TS2551: Property 'firstName' does not exist on type 'User'. Did you mean 'first_name'?
-marketplace/organization/mero-crm/src/layouts/DashboardLayout.tsx(60,54): error TS2551: Property 'lastName' does not exist on type 'User'. Did you mean 'last_name'?
