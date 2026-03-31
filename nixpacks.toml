@@ -5,7 +5,7 @@ nixPkgs = ['nodejs_22']
 cmds = ['npm install --prefix api --legacy-peer-deps']
 
 [phases.build]
-cmds = ['npm run build --prefix api']
+cmds = ['cd api && npm run build']
 
 [start]
 cmd = 'node api/dist/main.js'
