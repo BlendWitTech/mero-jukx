@@ -1,188 +1,65 @@
-name: Branch Protection & CI/CD
+name: Branch Protection
+
+# Blocks direct pushes to protected branches by non-owners.
+# Contributors must open a PR to develop — that is the only writable branch.
+# Branch flow enforced: develop → testing → main → production
+#
+# ALSO REQUIRED in GitHub Settings → Branches:
+# Add protection rules for: testing, main, production
+# Enable: "Require status checks" → select "Enforce branch protection"
+# Enable: "Restrict who can push" → add only the repo owner
 
 on:
   push:
-    branches:
-      - 'development/**'
-      - 'testing/**'
-      - 'production/**'
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-  pull_request:
-    branches:
-      - main
-      - development
-      - testing
-      - production
+    branches: [testing, main, production]
 
 jobs:
-  # Prevent direct pushes to protected branches
-  check-branch-protection:
-    name: Check Branch Protection
+  enforce-pr-only:
+    name: Enforce branch protection
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Check if pushing to protected branch
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Block direct pushes from non-owners
         run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          PROTECTED_BRANCHES="main development testing production"
-          
-          if echo "$PROTECTED_BRANCHES" | grep -q "$BRANCH"; then
-            echo "❌ ERROR: Direct push to protected branch '$BRANCH' is not allowed!"
-            echo "Please create a feature branch and open a pull request instead."
-            echo ""
-            echo "Protected branches: main, development, testing, production"
-            echo "Allowed branch patterns: development/**, testing/**, production/**, feature/**, bugfix/**, hotfix/**"
-            exit 1
+          ACTOR="${{ github.actor }}"
+          REPO_OWNER="${{ github.repository_owner }}"
+          BRANCH="${{ github.ref_name }}"
+          COMMIT_MSG=$(git log -1 --pretty=%s)
+
+          echo "Actor  : $ACTOR"
+          echo "Owner  : $REPO_OWNER"
+          echo "Branch : $BRANCH"
+          echo "Commit : $COMMIT_MSG"
+
+          # Repository owner is always allowed
+          if [ "$ACTOR" = "$REPO_OWNER" ]; then
+            echo "Owner push — allowed."
+            exit 0
           fi
-          
-          echo "✅ Branch '$BRANCH' is allowed"
 
-  # Run tests
-  test:
-    name: Run Tests
-    runs-on: ubuntu-latest
-    needs: check-branch-protection
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run tests
-        run: npm run test:all
-
-      - name: Upload test coverage
-        uses: codecov/codecov-action@v3
-        if: always()
-        with:
-          files: ./coverage/lcov.info
-          fail_ci_if_error: false
-
-  # Lint check
-  lint:
-    name: Lint Check
-    runs-on: ubuntu-latest
-    needs: check-branch-protection
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run lint check
-        run: npm run lint:check
-
-  # Build check
-  build:
-    name: Build Check
-    runs-on: ubuntu-latest
-    needs: check-branch-protection
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build backend
-        run: npm run build
-
-      - name: Build frontend
-        run: |
-          cd frontend
-          npm ci
-          npm run build
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v3
-        if: success()
-        with:
-          name: build-artifacts
-          path: |
-            dist/
-            frontend/dist/
-          retention-days: 7
-
-  # Auto-merge feature branches to their parent branch (if tests pass)
-  auto-merge:
-    name: Auto-merge to Parent Branch
-    runs-on: ubuntu-latest
-    needs: [test, lint, build]
-    if: github.event_name == 'push' && github.actor != 'dependabot[bot]'
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine parent branch
-        id: parent-branch
-        run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          
-          if [[ "$BRANCH" == development/* ]]; then
-            echo "parent=development" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH" == testing/* ]]; then
-            echo "parent=testing" >> $GITHUB_OUTPUT
-          elif [[ "$BRANCH" == production/* ]]; then
-            echo "parent=production" >> $GITHUB_OUTPUT
-          else
-            echo "parent=" >> $GITHUB_OUTPUT
+          # GitHub bots (dependabot, actions) are allowed
+          if echo "$ACTOR" | grep -q "\[bot\]"; then
+            echo "Bot push — allowed."
+            exit 0
           fi
-          
-          echo "Current branch: $BRANCH"
-          echo "Parent branch: ${{ steps.parent-branch.outputs.parent }}"
 
-      - name: Create Pull Request
-        if: steps.parent-branch.outputs.parent != ''
-        uses: peter-evans/create-pull-request@v5
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          title: "Auto-merge: ${{ github.ref_name }} → ${{ steps.parent-branch.outputs.parent }}"
-          body: |
-            This PR was automatically created from feature branch `${{ github.ref_name }}` to `${{ steps.parent-branch.outputs.parent }}`.
-            
-            **Branch:** `${{ github.ref_name }}`
-            **Target:** `${{ steps.parent-branch.outputs.parent }}`
-            **Author:** @${{ github.actor }}
-            
-            All CI checks have passed:
-            - ✅ Tests passed
-            - ✅ Lint check passed
-            - ✅ Build successful
-            
-            Please review and merge when ready.
-          branch: auto-merge-${{ github.ref_name }}-to-${{ steps.parent-branch.outputs.parent }}
-          base: ${{ steps.parent-branch.outputs.parent }}
-          delete-branch: true
-          labels: |
-            auto-merge
-            ${{ steps.parent-branch.outputs.parent }}
+          # PR merges produce a commit starting with "Merge pull request"
+          if echo "$COMMIT_MSG" | grep -qE "^Merge pull request"; then
+            echo "PR merge — allowed."
+            exit 0
+          fi
 
+          echo ""
+          echo "BLOCKED: Direct push to '$BRANCH' is not allowed for '$ACTOR'."
+          echo ""
+          echo "Required flow:"
+          echo "  1. Work on a feature/* or fix/* branch branched from 'develop'"
+          echo "  2. Open a PR targeting 'develop'"
+          echo "  3. Owner promotes: develop -> testing -> main -> production"
+          echo ""
+          exit 1
+        shell: bash

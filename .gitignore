@@ -73,3 +73,8 @@ frontend/public/uploads/
 .eslintcache
 .stylelintcache
 *.tsbuildinfo
+
+# AI assistant workspaces (local only, not for repo)
+.agent/
+.agents/
+.claude/
