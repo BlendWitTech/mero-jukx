@@ -83,9 +83,9 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
             const headers = csvData[0];
             const dataToImport = csvData.slice(1).map(row => {
                 const obj: any = {};
-                Object.entries(mapping).forEach(([expected, indexStr]) => {
-                    const index = parseInt(indexStr);
-                    obj[expected] = row[index] || '';
+                (Object.entries(mapping) as [string, string][]).forEach(([expected, indexStr]) => {
+                    const index = parseInt(indexStr, 10);
+                    obj[expected] = row[index] ?? '';
                 });
                 return obj;
             });
