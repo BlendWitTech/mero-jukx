@@ -55,7 +55,7 @@
     "test:payroll": "cross-env NODE_ENV=test jest --config ./api/test/jest-e2e.json --testPathPattern=payroll --forceExit --runInBand",
     "db:test:reset": "cross-env NODE_ENV=test ts-node api/src/database/reset-database.ts",
     "db:test:init": "cross-env NODE_ENV=test ts-node api/src/database/init-database-cli.ts",
-    "build:api": "cd api && npm ci && npm run build",
+    "build:api": "cd api && npm run build",
     "build:frontend": "cd app && npm ci && npm run build",
     "build:all": "npm run build:api && npm run build:frontend",
     "start:prod:api": "node api/dist/main.js",
