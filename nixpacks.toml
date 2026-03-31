@@ -2,10 +2,10 @@
 nixPkgs = ['nodejs_22']
 
 [phases.install]
-cmds = ['npm install --prefix api --legacy-peer-deps --include=dev']
+cmds = ['cd api && npm install --legacy-peer-deps']
 
 [phases.build]
-cmds = ['cd api && npm run build']
+cmds = ['cd api && ./node_modules/.bin/nest build && ls -la dist/']
 
 [start]
 cmd = 'node api/dist/main.js'
