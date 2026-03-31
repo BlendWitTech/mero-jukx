@@ -1,27 +1,35 @@
 # Branch Strategy
 
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contributor guide including commit conventions and release process.
+See [CONTRIBUTING.md](../CONTRIBUTING.md) for the full contributor guide.
 
 ## Branch Hierarchy
 
 ```
-main       ← Production (protected, owner-only, auto-deploys to Railway prod + Vercel)
-  └── staging  ← Pre-production QA (protected, auto-deploys to Railway staging)
-        └── develop  ← Active development (default branch, protected)
-              ├── feature/short-description
-              ├── fix/bug-description
-              ├── hotfix/critical-fix
-              └── chore/task-name
+main         ← Source of truth (protected, owner-only direct push)
+  └── production  ← Production-ready code → deploys to Railway prod + Vercel prod
+        └── testing     ← QA / pre-production → deploys to Railway testing
+              └── develop  ← Active development (default branch)
+                    ├── feature/short-description
+                    ├── fix/bug-description
+                    └── chore/task-name
 ```
 
-## Quick Reference
+## Branch Reference
 
 | Branch | Purpose | Deploys to | Who merges |
 |--------|---------|-----------|-----------|
-| `main` | Production releases | Railway prod + Vercel | Owner only |
-| `staging` | QA / pre-prod testing | Railway staging | Maintainer + owner approval |
-| `develop` | Active development | — | Any contributor via PR |
+| `main` | Source of truth, git history | — | Owner only (via PR from production) |
+| `production` | Production-ready code | Railway prod + Vercel | Maintainer + owner approval |
+| `testing` | QA / staging | Railway testing env | Any contributor via PR |
+| `develop` | Active development | — (local only) | Any contributor via PR |
 | `feature/*` `fix/*` etc. | Work in progress | — | Author |
+
+## Merge Flow
+
+```
+feature/xyz ──PR──▶ develop ──PR──▶ testing ──PR──▶ production ──PR──▶ main
+                                    (QA here)         (final check)
+```
 
 ## Branch Naming
 
@@ -30,15 +38,20 @@ feature/invoice-pdf-export
 fix/token-refresh-race-condition
 hotfix/esewa-callback-url
 chore/upgrade-typeorm
-release/v1.2.0
 ```
 
-## Merge Flow
+## Branch Protection Rules
 
-```
-feature/xyz  ──PR──▶  develop  ──PR──▶  staging  ──PR──▶  main (+ tag v1.x.x)
-```
+### `main`
+- Owner-only direct push blocked for everyone else
+- Requires PR from `production`
+- All CI checks must pass
 
-## Versioning
+### `production`, `testing`
+- Direct pushes blocked — must use PRs
+- Minimum 1 approval
+- All CI checks must pass
 
-Tags follow `v{MAJOR}.{MINOR}.{PATCH}` on `main`. See [CONTRIBUTING.md](../CONTRIBUTING.md#versioning--release-process) for the full release process.
+### `develop`
+- PRs required for merging
+- CI checks must pass

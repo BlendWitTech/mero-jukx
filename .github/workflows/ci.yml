@@ -2,17 +2,14 @@ name: CI — Lint, Test, Build
 
 on:
   push:
-    branches: [develop, staging, main]
+    branches: [develop, testing, production, main]
   pull_request:
-    branches: [develop, staging, main]
+    branches: [develop, testing, production, main]
 
 env:
   NODE_VERSION: '20'
 
 jobs:
-  # ─────────────────────────────────────────
-  # 1. API: Lint + E2E tests
-  # ─────────────────────────────────────────
   test-api:
     name: API Tests
     runs-on: ubuntu-latest
@@ -73,9 +70,6 @@ jobs:
           ESEWA_USE_MOCK_MODE: true
         run: npm run test:api
 
-  # ─────────────────────────────────────────
-  # 2. Frontend: Build check
-  # ─────────────────────────────────────────
   build-frontend:
     name: Frontend Build
     runs-on: ubuntu-latest
@@ -97,9 +91,6 @@ jobs:
           VITE_API_URL: https://placeholder.railway.app
         run: cd app && npm run build
 
-  # ─────────────────────────────────────────
-  # 3. Backend: Build check
-  # ─────────────────────────────────────────
   build-backend:
     name: Backend Build
     runs-on: ubuntu-latest

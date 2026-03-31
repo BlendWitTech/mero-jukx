@@ -1,41 +1,39 @@
-name: Deploy — Staging
+name: Deploy — Testing Environment
 
 on:
   push:
-    branches: [staging]
+    branches: [testing]
+
+env:
+  NODE_VERSION: '20'
 
 jobs:
-  deploy-staging-api:
-    name: Deploy API to Railway (Staging)
+  deploy-api-testing:
+    name: Deploy API to Railway (Testing)
     runs-on: ubuntu-latest
-    environment:
-      name: staging
-      url: ${{ secrets.STAGING_API_URL }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Deploy to Railway (Staging)
-        uses: bervProject/railway-deploy@main
-        with:
-          railway_token: ${{ secrets.RAILWAY_TOKEN_STAGING }}
-          service: ${{ secrets.RAILWAY_SERVICE_ID_STAGING }}
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
 
-  deploy-staging-frontend:
+      - name: Deploy API to Railway (Testing)
+        run: railway up --service=${{ secrets.RAILWAY_SERVICE_ID_TESTING }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN_TESTING }}
+
+  deploy-frontend-testing:
     name: Deploy Frontend to Vercel (Preview)
     runs-on: ubuntu-latest
-    needs: deploy-staging-api
-    environment:
-      name: staging
-      url: ${{ steps.deploy.outputs.url }}
+    needs: deploy-api-testing
 
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
+          node-version: ${{ env.NODE_VERSION }}
           cache-dependency-path: app/package-lock.json
 
       - name: Install Vercel CLI
@@ -43,14 +41,19 @@ jobs:
 
       - name: Pull Vercel environment
         run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Build frontend
         run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
         env:
-          VITE_API_URL: ${{ secrets.STAGING_API_URL }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VITE_API_URL: ${{ secrets.TESTING_API_URL }}
 
-      - name: Deploy to Vercel (Preview)
-        id: deploy
-        run: |
-          url=$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})
-          echo "url=$url" >> $GITHUB_OUTPUT
+      - name: Deploy to Vercel Preview
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
