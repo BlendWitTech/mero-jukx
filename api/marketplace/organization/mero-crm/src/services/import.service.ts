@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CrmLead } from '@src/database/entities/crm_leads.entity';
 import { CrmClient } from '@src/database/entities/crm_clients.entity';
-import * as csv from 'csv-parser';
+import csv from 'csv-parser';
 import { Readable } from 'stream';
 
 @Injectable()
