@@ -194,7 +194,7 @@ export default function CreateTicketPage() {
                   rows={5}
                   placeholder="Describe the issue or request in detail..."
                   className="w-full px-3 py-2 rounded-lg border text-sm resize-none focus:outline-none focus:ring-2"
-                  style={{ ...inputStyle, focusRingColor: theme.colors.primary }}
+                  style={inputStyle}
                 />
                 {errors.description && (
                   <p className="mt-1 text-xs text-red-500">{errors.description.message}</p>

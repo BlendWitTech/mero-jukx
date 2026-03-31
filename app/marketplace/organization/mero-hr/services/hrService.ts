@@ -155,4 +155,6 @@ export const hrService = {
     getSelfLeaveBalance: async () => (await api.get<HrLeaveBalance[]>('/hr/leave/my/balances')).data,
     getSelfAttendance: async (params?: { startDate?: string; endDate?: string }) =>
         (await api.get<HrAttendance[]>('/hr/attendance/my', { params })).data,
+    updateLeaveStatus: async (id: string, status: string, remarks?: string) =>
+        (await api.patch<HrLeaveRequest>(`/hr/leave/${id}/status`, { status, remarks })).data,
 };

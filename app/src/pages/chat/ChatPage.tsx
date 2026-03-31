@@ -628,7 +628,7 @@ export default function ChatPage() {
                   const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🎉'];
 
                   // Group reactions by emoji
-                  const reactionGroups = (message.reactions || []).reduce((acc: Record<string, number>, r) => {
+                  const reactionGroups: Record<string, number> = (message.reactions || []).reduce((acc: Record<string, number>, r) => {
                     acc[r.emoji] = (acc[r.emoji] || 0) + 1;
                     return acc;
                   }, {});

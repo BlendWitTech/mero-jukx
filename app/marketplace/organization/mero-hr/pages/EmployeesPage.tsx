@@ -13,10 +13,6 @@ import {
     Card,
     Button,
     Input,
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem,
     Badge
 } from '@shared';
 import { HrEmployee, HrEmployeeStatus } from '../types';
@@ -82,7 +78,7 @@ export default function EmployeesPage() {
             case HrEmployeeStatus.ON_LEAVE:
                 return <Badge variant="warning" className="font-bold">On Leave</Badge>;
             case HrEmployeeStatus.TERMINATED:
-                return <Badge variant="destructive" className="font-bold">Terminated</Badge>;
+                return <Badge variant="danger" className="font-bold">Terminated</Badge>;
             case HrEmployeeStatus.RESIGNED:
                 return <Badge variant="secondary" className="font-bold">Resigned</Badge>;
             default:

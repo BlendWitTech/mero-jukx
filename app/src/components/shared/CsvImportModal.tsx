@@ -43,7 +43,7 @@ export const CsvImportModal: React.FC<CsvImportModalProps> = ({
             const text = e.target?.result as string;
             const rows = text.split(/\r?\n/).map(row => {
                 // Simple CSV splitter that handles basic quotes
-                const result = [];
+                const result: string[] = [];
                 let cur = '';
                 let inQuotes = false;
                 for (let i = 0; i < row.length; i++) {

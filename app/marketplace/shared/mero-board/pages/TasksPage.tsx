@@ -853,11 +853,29 @@ ${dataRows.join('\n')}
       ) : viewMode === 'kanban' ? (
         <div className="h-[calc(100vh-400px)]">
           <TaskKanban
-            tasks={tasks || []}
+            columns={[TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.DONE].map((status, index) => ({
+              id: status,
+              name: status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+              color: '#888',
+              sort_order: index,
+              wip_limit: null,
+              tickets: (tasks || []).filter((t) => t.status === status).map((t) => ({
+                id: t.id,
+                subject: t.title,
+                description: t.description,
+                status: t.status,
+                priority: t.priority,
+                due_date: t.due_date,
+                sort_order: 0,
+                column_id: t.status,
+                parent_task_id: null,
+                assignees: t.assignee ? [{ id: t.assignee.id, first_name: t.assignee.first_name, last_name: t.assignee.last_name }] : [],
+                tags: t.tags,
+              })),
+            }))}
+            onTaskMove={(taskId, targetColumnId) => handleStatusChange(taskId, targetColumnId as TaskStatus)}
+            onColumnMove={() => {}}
             onTaskClick={(taskId) => navigate(`${taskId}`, { relative: 'route' })}
-            onStatusChange={handleStatusChange}
-            getStatusColor={getStatusColorVariant}
-            getPriorityColor={getPriorityColorVariant}
           />
         </div>
       ) : viewMode === 'gantt' ? (

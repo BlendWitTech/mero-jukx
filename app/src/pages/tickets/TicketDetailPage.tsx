@@ -39,11 +39,6 @@ export default function TicketDetailPage() {
   const [localTags, setLocalTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
 
-  // Sync tags when ticket loads
-  useEffect(() => {
-    if (ticket?.tags) setLocalTags(ticket.tags);
-  }, [ticket?.tags]);
-
   // Fetch ticket details
   const { data: ticket, isLoading, error } = useQuery({
     queryKey: ['ticket', ticketId],
@@ -54,6 +49,11 @@ export default function TicketDetailPage() {
     enabled: !!ticketId,
     retry: false,
   });
+
+  // Sync tags when ticket loads
+  useEffect(() => {
+    if (ticket?.tags) setLocalTags(ticket.tags);
+  }, [ticket?.tags]);
 
   // Fetch org members for assignee dropdown
   const { data: usersData } = useQuery({
