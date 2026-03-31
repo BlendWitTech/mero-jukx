@@ -35,8 +35,8 @@ jobs:
           echo "Branch : $BRANCH"
           echo "Commit : $COMMIT_MSG"
 
-          # Repository owner is always allowed
-          if [ "$ACTOR" = "$REPO_OWNER" ]; then
+          # Repository owner is always allowed (case-insensitive)
+          if [ "${ACTOR,,}" = "${REPO_OWNER,,}" ]; then
             echo "Owner push — allowed."
             exit 0
           fi
