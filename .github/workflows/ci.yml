@@ -1,38 +1,30 @@
-name: CI/CD Pipeline
+name: CI — Lint, Test, Build
 
 on:
   push:
-    branches:
-      - main
-      - development
-      - testing
-      - production
+    branches: [develop, staging, main]
   pull_request:
-    branches:
-      - main
-      - development
-      - testing
-      - production
+    branches: [develop, staging, main]
 
 env:
   NODE_VERSION: '20'
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  lint-and-test:
-    name: Lint and Test
+  # ─────────────────────────────────────────
+  # 1. API: Lint + E2E tests
+  # ─────────────────────────────────────────
+  test-api:
+    name: API Tests
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:15-alpine
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: mero_jugx_test
-        ports:
-          - 5432:5432
+        ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -41,8 +33,7 @@ jobs:
 
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
+        ports: ['6379:6379']
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 10s
@@ -50,22 +41,20 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
 
-      - name: Run linter
+      - name: Lint
         run: npm run lint || true
 
-      - name: Run tests
+      - name: E2E API Tests
         env:
           NODE_ENV: test
           DB_HOST: localhost
@@ -75,124 +64,57 @@ jobs:
           DB_NAME: mero_jugx_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
-          JWT_SECRET: test-secret
-          JWT_REFRESH_SECRET: test-refresh-secret
-        run: npm test -- --coverage
+          JWT_SECRET: ci-test-jwt-secret-32chars-minimum
+          JWT_REFRESH_SECRET: ci-test-refresh-secret-32chars-min
+          AUTO_INIT_DB: true
+          RUN_MIGRATIONS: true
+          RUN_SEEDS: true
+          THROTTLE_LIMIT: 1000
+          ESEWA_USE_MOCK_MODE: true
+        run: npm run test:api
 
-      - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: ./coverage/lcov.info
-          flags: backend
-          name: backend-coverage
-
-  build-backend:
-    name: Build Backend Docker Image
-    runs-on: ubuntu-latest
-    needs: lint-and-test
-    if: github.event_name == 'push'
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-backend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
+  # ─────────────────────────────────────────
+  # 2. Frontend: Build check
+  # ─────────────────────────────────────────
   build-frontend:
-    name: Build Frontend Docker Image
+    name: Frontend Build
     runs-on: ubuntu-latest
-    needs: lint-and-test
-    if: github.event_name == 'push'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - uses: actions/setup-node@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-frontend
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+      - name: Install frontend dependencies
+        run: cd app && npm ci
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL }}
+      - name: Build frontend
+        env:
+          VITE_API_URL: https://placeholder.railway.app
+        run: cd app && npm run build
 
-  deploy:
-    name: Deploy to Production
+  # ─────────────────────────────────────────
+  # 3. Backend: Build check
+  # ─────────────────────────────────────────
+  build-backend:
+    name: Backend Build
     runs-on: ubuntu-latest
-    needs: [build-backend, build-frontend]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    environment:
-      name: production
-      url: ${{ secrets.DEPLOYMENT_URL }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Deploy to server
-        uses: appleboy/ssh-action@v1.0.0
+      - uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /opt/mero-jugx
-            docker-compose pull
-            docker-compose up -d --build
-            docker-compose exec -T backend npm run migration:run || true
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: api/package-lock.json
+
+      - name: Install API dependencies
+        run: cd api && npm ci
+
+      - name: Build NestJS
+        run: cd api && npm run build

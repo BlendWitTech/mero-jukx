@@ -7,6 +7,14 @@
     "^.+\\.(t|j)s$": "ts-jest"
   },
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
-  }
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^@src/(.*)$": "<rootDir>/../src/$1"
+  },
+  "setupFiles": [
+    "<rootDir>/helpers/setup-env.ts"
+  ],
+  "testTimeout": 60000,
+  "forceExit": true,
+  "runInBand": true,
+  "verbose": true
 }

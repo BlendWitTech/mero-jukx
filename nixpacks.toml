@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ['nodejs-18_x', 'postgresql']
+nixPkgs = ['nodejs_20', 'postgresql_15']
 
 [phases.install]
-cmds = ['npm ci']
+cmds = ['npm ci --prefix api']
 
 [phases.build]
-cmds = ['npm run build:all']
+cmds = ['npm run build --prefix api']
 
 [start]
-cmd = 'cd api && node dist/main.js'
+cmd = 'node api/dist/main.js'
