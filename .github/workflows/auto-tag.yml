@@ -1,0 +1,57 @@
+name: Auto Tag
+
+# Creates a version tag automatically on every push to testing, main, production.
+#
+# Tag format:
+#   testing    →  testing-YYYYMMDD-<short-sha>      e.g. testing-20260331-a1b2c3d
+#   main       →  main-YYYYMMDD-<short-sha>          e.g. main-20260331-a1b2c3d
+#   production →  v2026.03.31.<run-number>            e.g. v2026.03.31.42
+#
+# Production tags use a date-based version so you always know exactly
+# when each live release was deployed.
+
+on:
+  push:
+    branches: [testing, main, production]
+
+permissions:
+  contents: write
+
+jobs:
+  tag:
+    name: Create version tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate tag name
+        id: tag
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          DATE=$(date +'%Y%m%d')
+          FULL_DATE=$(date +'%Y.%m.%d')
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          RUN="${{ github.run_number }}"
+
+          if [ "$BRANCH" = "production" ]; then
+            TAG="v${FULL_DATE}.${RUN}"
+          elif [ "$BRANCH" = "main" ]; then
+            TAG="main-${DATE}-${SHORT_SHA}"
+          elif [ "$BRANCH" = "testing" ]; then
+            TAG="testing-${DATE}-${SHORT_SHA}"
+          fi
+
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+
+      - name: Create and push tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.tag.outputs.tag }}" -m "Auto-tag: ${{ steps.tag.outputs.tag }} on ${{ github.ref_name }}"
+          git push origin "${{ steps.tag.outputs.tag }}"
+          echo "Tagged: ${{ steps.tag.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
