@@ -9,6 +9,7 @@ import { seedPackageFeatures } from './seeds/004-package-features.seed';
 import { seedRoleTemplates } from './seeds/005-role-templates.seed';
 import { seedSystemAdminUser } from './seeds/006-system-admin-user.seed';
 import { seedWorkspaceProjectTemplates } from '../../marketplace/shared/mero-board/seeds/workspace-project-templates.seed';
+import { seedNepalChartOfAccounts } from './seeds/007-nepal-chart-of-accounts.seed';
 
 // Load environment variables
 config();
@@ -99,6 +100,8 @@ export async function initializeDatabase(): Promise<void> {
         console.log('  ✓ System admin user seeded');
         await seedWorkspaceProjectTemplates(AppDataSource);
         console.log('  ✓ Workspace project templates seeded');
+        await seedNepalChartOfAccounts(AppDataSource);
+        console.log('  ✓ Nepal chart of accounts seeded');
         console.log('  ✓ All seeds complete.\n');
       } catch (seedError: any) {
         console.error('  ⚠️ Seed error (non-fatal):', seedError?.message || seedError);
