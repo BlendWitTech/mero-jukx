@@ -41,8 +41,8 @@ export class EmailService {
       );
     }
 
-    // In development, use Resend if API key is provided and package is installed
-    if (isDevelopment && resendApiKey && Resend) {
+    // Use Resend if API key is provided and package is installed (any environment)
+    if (resendApiKey && Resend) {
       try {
         this.resend = new Resend(resendApiKey);
         this.useResend = true;
@@ -50,15 +50,10 @@ export class EmailService {
       } catch (error) {
         console.warn('Failed to initialize Resend, falling back to SMTP or console logging', error);
       }
-    } else if (isDevelopment && resendApiKey && !Resend) {
-      console.warn(
-        '⚠️  RESEND_API_KEY is set but resend package is not installed. Run: npm install resend',
-      );
-    } else if (isDevelopment && !resendApiKey) {
-      console.warn(
-        '⚠️  RESEND_API_KEY is not set. Emails will be logged to console in development mode.',
-      );
-      console.warn('⚠️  Please add RESEND_API_KEY to your .env file and restart the server.');
+    } else if (resendApiKey && !Resend) {
+      console.warn('⚠️  RESEND_API_KEY is set but resend package is not installed.');
+    } else if (!resendApiKey) {
+      console.warn('⚠️  RESEND_API_KEY is not set. Emails will not be sent.');
     }
 
     // If not using Resend, try SMTP
@@ -166,12 +161,9 @@ export class EmailService {
             );
           }
         }
-        // Email already logged above, don't log again
-        if (isDevelopment) {
-          // Don't throw in development, just log
-          return;
-        }
-        throw error;
+        // Don't throw — log and continue so callers aren't broken by email failures
+        console.warn('⚠️  Email send failed via Resend, continuing without email.');
+        return;
       }
     }
 
