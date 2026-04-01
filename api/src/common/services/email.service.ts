@@ -202,13 +202,9 @@ export class EmailService {
       }
     }
 
-    // If neither Resend nor SMTP is configured, log to console (development only)
-    if (isDevelopment) {
-      // Email already logged above
-      console.log('⚠️  Email not sent (no email service configured) - see email content above');
-    } else {
-      throw new Error('Email service not configured');
-    }
+    // If neither Resend nor SMTP is configured, log to console
+    console.warn('⚠️  [EmailService] Email not sent — no email service configured (set RESEND_API_KEY or SMTP)');
+    console.warn(`   To: ${to} | Subject: ${subject}`);
   }
 
   private logInvitationDetails(

@@ -275,19 +275,24 @@ export class AuthService {
 
         await queryRunner.manager.save(emailVerification);
 
-        // Send verification email (will be logged to console in development if SMTP not configured)
+        // Send verification email (non-fatal if email not configured)
         const appUrl = origin || this.configService.get<string>('FRONTEND_URL', 'http://localhost:3001');
         const verificationUrl = `${appUrl}/verify-email?token=${verificationToken}`;
-        await this.emailService.sendEmail(
-          ownerUser.email,
-          'Verify Your Email Address',
-          `
-            <h2>Welcome to ${dto.name}!</h2>
-            <p>Please verify your email address by clicking the link below:</p>
-            <p><a href="${verificationUrl}">Verify Email</a></p>
-            <p>This link will expire in 24 hours.</p>
-          `,
-        );
+        try {
+          await this.emailService.sendEmail(
+            ownerUser.email,
+            'Verify Your Email Address',
+            `
+              <h2>Welcome to ${dto.name}!</h2>
+              <p>Please verify your email address by clicking the link below:</p>
+              <p><a href="${verificationUrl}">Verify Email</a></p>
+              <p>This link will expire in 24 hours.</p>
+            `,
+          );
+        } catch (emailError) {
+          console.error('[AuthService] Failed to send verification email:', emailError);
+          console.warn('[AuthService] Organization registration will continue despite email error');
+        }
       }
 
       // Create organization (email_verified defaults to false)
