@@ -88,8 +88,8 @@ export class EmailService {
           'Neither Resend nor SMTP configured. Email sending will be logged to console in development mode.',
         );
       } else {
-        throw new Error(
-          'Email service configuration is required in production (RESEND_API_KEY or SMTP)',
+        console.warn(
+          '⚠️  [EmailService] Email service is disabled. Set RESEND_API_KEY or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASSWORD to enable.',
         );
       }
     }
