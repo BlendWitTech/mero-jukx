@@ -29,6 +29,7 @@ import {
   Package,
   BookOpen,
   Calculator,
+  FileText,
 } from 'lucide-react';
 import { useAuthStore } from '../../store/authStore';
 import toast from '@shared/hooks/useToast';
@@ -680,6 +681,7 @@ export default function AppsPage() {
                         if (app.icon_url === 'Users') return <Users className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'FolderKanban') return <FolderKanban className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'Package') return <Package className="w-10 h-10" style={{ color: theme.colors.primary }} />;
+                        if (app.icon_url === 'FileText' || app.slug === 'mero-cms') return <FileText className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'BookOpen' || app.slug === 'mero-khata') return <BookOpen className="w-10 h-10" style={{ color: theme.colors.primary }} />;
                         if (app.icon_url === 'Calculator' || app.slug === 'mero-accounting') return <Calculator className="w-10 h-10" style={{ color: theme.colors.primary }} />;
 
@@ -772,6 +774,7 @@ export default function AppsPage() {
                         if (selectedApp.icon_url === 'Users') return <Users className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'FolderKanban') return <FolderKanban className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'Package') return <Package className="w-32 h-32" style={{ color: theme.colors.primary }} />;
+                        if (selectedApp.icon_url === 'FileText' || selectedApp.slug === 'mero-cms') return <FileText className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'BookOpen' || selectedApp.slug === 'mero-khata') return <BookOpen className="w-32 h-32" style={{ color: theme.colors.primary }} />;
                         if (selectedApp.icon_url === 'Calculator' || selectedApp.slug === 'mero-accounting') return <Calculator className="w-32 h-32" style={{ color: theme.colors.primary }} />;
 

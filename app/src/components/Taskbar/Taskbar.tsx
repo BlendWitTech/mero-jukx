@@ -17,6 +17,11 @@ import {
   Users,
   FolderKanban,
   Package,
+  FileText,
+  BookOpen,
+  Calculator,
+  Brain,
+  UserCheck,
 } from 'lucide-react';
 import { Button } from '@shared';
 import { ConfirmDialog } from '@shared/components/feedback/ConfirmDialog';
@@ -56,6 +61,11 @@ export default function Taskbar({
     if (app.icon === 'Users' || app.slug === 'mero-crm') return <Users className="w-6 h-6" style={{ color: theme.colors.primary }} />;
     if (app.icon === 'FolderKanban' || app.slug === 'mero-board') return <FolderKanban className="w-6 h-6" style={{ color: theme.colors.primary }} />;
     if (app.icon === 'Package' || app.slug === 'mero-inventory') return <Package className="w-6 h-6" style={{ color: theme.colors.primary }} />;
+    if (app.icon === 'FileText' || app.slug === 'mero-cms') return <FileText className="w-6 h-6" style={{ color: theme.colors.primary }} />;
+    if (app.icon === 'BookOpen' || app.slug === 'mero-khata') return <BookOpen className="w-6 h-6" style={{ color: theme.colors.primary }} />;
+    if (app.icon === 'Calculator' || app.slug === 'mero-accounting') return <Calculator className="w-6 h-6" style={{ color: theme.colors.primary }} />;
+    if (app.icon === 'Brain' || app.slug === 'mero-hr') return <Brain className="w-6 h-6" style={{ color: theme.colors.primary }} />;
+    if (app.icon === 'UserCheck' || app.slug === 'mero-crm') return <UserCheck className="w-6 h-6" style={{ color: theme.colors.primary }} />;
 
     return app.icon ? (
       <img src={app.icon} alt={app.name} className="w-6 h-6" />

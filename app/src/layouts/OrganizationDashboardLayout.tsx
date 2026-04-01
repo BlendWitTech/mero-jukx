@@ -32,6 +32,11 @@ import {
   Moon,
   CreditCard,
   Zap,
+  FileText,
+  BookOpen,
+  Calculator,
+  Brain,
+  UserCheck,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import * as React from 'react';
@@ -545,6 +550,10 @@ export default function OrganizationDashboardLayout() {
                             if (app.icon_url === 'Users' || app.slug === 'mero-crm') return <Users className="w-6 h-6" />;
                             if (app.icon_url === 'FolderKanban' || app.slug === 'mero-board') return <FolderKanban className="w-6 h-6" />;
                             if (app.icon_url === 'Package' || app.slug === 'mero-inventory') return <Package className="w-6 h-6" />;
+                            if (app.icon_url === 'FileText' || app.slug === 'mero-cms') return <FileText className="w-6 h-6" />;
+                            if (app.icon_url === 'BookOpen' || app.slug === 'mero-khata') return <BookOpen className="w-6 h-6" />;
+                            if (app.icon_url === 'Calculator' || app.slug === 'mero-accounting') return <Calculator className="w-6 h-6" />;
+                            if (app.icon_url === 'Brain' || app.slug === 'mero-hr') return <Brain className="w-6 h-6" />;
 
                             return app.icon_url ? (
                               <img

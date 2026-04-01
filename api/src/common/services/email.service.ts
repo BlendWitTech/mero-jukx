@@ -161,9 +161,8 @@ export class EmailService {
             );
           }
         }
-        // Don't throw — log and continue so callers aren't broken by email failures
-        console.warn('⚠️  Email send failed via Resend, continuing without email.');
-        return;
+        // Don't throw — fall through to SMTP if configured, otherwise log and continue
+        console.warn('⚠️  Email send failed via Resend, falling back to SMTP if configured.');
       }
     }
 

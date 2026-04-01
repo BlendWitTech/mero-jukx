@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WorkflowTemplate, WorkflowExecution, WorkflowExecutionStatus } from '../database/entities/workflow.entity';
+import { EmailService } from '../common/services/email.service';
 
 export interface CreateWorkflowDto {
     name: string;
@@ -22,6 +23,7 @@ export class WorkflowsService {
         private workflowRepository: Repository<WorkflowTemplate>,
         @InjectRepository(WorkflowExecution)
         private executionRepository: Repository<WorkflowExecution>,
+        private emailService: EmailService,
     ) {}
 
     async create(organizationId: string, userId: string, dto: CreateWorkflowDto): Promise<WorkflowTemplate> {
@@ -181,12 +183,75 @@ export class WorkflowsService {
 
             case 'action': {
                 const actionType = data.actionType || 'UNKNOWN';
-                this.logger.log(`Workflow action executed: ${actionType}`, JSON.stringify(data));
-                return { message: `Action executed: ${actionType}`, actionData: data };
+                return this.executeAction(actionType, data, context);
             }
 
             default:
                 return { message: `Unknown node type: ${nodeType}` };
         }
+    }
+
+    private async executeAction(actionType: string, data: any, context: Record<string, any>): Promise<Record<string, any>> {
+        this.logger.log(`Executing workflow action: ${actionType}`);
+
+        switch (actionType.toUpperCase()) {
+            case 'SEND_EMAIL': {
+                const to = this.resolveTemplate(data.to || '', context);
+                const subject = this.resolveTemplate(data.subject || 'Notification', context);
+                const body = this.resolveTemplate(data.body || data.message || '', context);
+                if (!to) {
+                    return { message: 'SEND_EMAIL skipped: no recipient configured', actionType };
+                }
+                try {
+                    await this.emailService.sendEmail(to, subject, `<p>${body}</p>`, body);
+                    return { message: `Email sent to ${to}`, actionType };
+                } catch (err: any) {
+                    this.logger.warn(`Workflow SEND_EMAIL failed: ${err?.message}`);
+                    return { message: `Email failed: ${err?.message}`, actionType, error: true };
+                }
+            }
+
+            case 'SEND_NOTIFICATION': {
+                // Logs the notification — full push notification support requires a notification service injection
+                const title = this.resolveTemplate(data.title || 'Notification', context);
+                const message = this.resolveTemplate(data.message || '', context);
+                this.logger.log(`Workflow notification: [${title}] ${message}`);
+                return { message: `Notification queued: ${title}`, actionType };
+            }
+
+            case 'WEBHOOK': {
+                const url = this.resolveTemplate(data.url || '', context);
+                if (!url) return { message: 'WEBHOOK skipped: no URL configured', actionType };
+                try {
+                    const { default: axios } = await import('axios');
+                    const payload = data.payload ? JSON.parse(this.resolveTemplate(JSON.stringify(data.payload), context)) : context;
+                    const method = (data.method || 'POST').toLowerCase();
+                    await axios[method](url, payload, { timeout: 10000 });
+                    return { message: `Webhook called: ${url}`, actionType };
+                } catch (err: any) {
+                    this.logger.warn(`Workflow WEBHOOK failed: ${err?.message}`);
+                    return { message: `Webhook failed: ${err?.message}`, actionType, error: true };
+                }
+            }
+
+            case 'LOG': {
+                const msg = this.resolveTemplate(data.message || 'Workflow log', context);
+                this.logger.log(`[Workflow LOG] ${msg}`);
+                return { message: msg, actionType };
+            }
+
+            default:
+                this.logger.warn(`Unknown workflow action type: ${actionType}`);
+                return { message: `Unknown action: ${actionType}`, actionType };
+        }
+    }
+
+    /**
+     * Simple template resolver: replaces {{key}} placeholders from context.
+     */
+    private resolveTemplate(template: string, context: Record<string, any>): string {
+        return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+            return context[key] !== undefined ? String(context[key]) : `{{${key}}}`;
+        });
     }
 }
