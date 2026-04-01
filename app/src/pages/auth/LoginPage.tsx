@@ -10,7 +10,7 @@ import { Loader2, Mail, Lock, Shield, ArrowLeft, Building2, Sparkles, Eye, EyeOf
 // Import shared components
 import { Button, Input, Card, CardHeader, CardTitle, CardContent, CardDescription, Loading } from '@shared';
 import { getRedirectToAppAfterLogin } from '../../utils/appRouting';
-import { getMainDomainUrl, getAppNameFromSubdomain, isAppSubdomain } from '../../config/urlConfig';
+import { getMainDomainUrl, getAppNameFromSubdomain, isAppSubdomain, buildAppSubdomainUrl } from '../../config/urlConfig';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -62,7 +62,7 @@ const handlePostLoginRedirect = (orgSlug: string | null, navigate: (path: string
   const appRedirect = getRedirectToAppAfterLogin();
   if (appRedirect && orgSlug) {
     // Redirect to app subdomain with org dashboard
-    window.location.href = `http://${appRedirect.appName}.dev.merojugx.com:3001/org/${orgSlug}`;
+    window.location.href = buildAppSubdomainUrl(appRedirect.appName, '', orgSlug);
     return;
   }
 

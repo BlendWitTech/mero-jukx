@@ -106,15 +106,17 @@ export function isAppSubdomain(): boolean {
   // Check for production domain pattern (appname.domainname.com)
   // Exclude common prefixes like www, dev, api, etc.
   const excludedPrefixes = ['www', 'dev', 'api', 'admin', 'app', 'apps', 'merojugx'];
+  // Exclude deployment platform base domains — these are not user-owned custom domains
+  const platformDomains = ['vercel.app', 'railway.app', 'netlify.app', 'herokuapp.com', 'pages.dev', 'onrender.com'];
   const parts = hostname.split('.');
-  if (parts.length >= 3) {
+  const baseDomain = parts.slice(-2).join('.');
+  if (parts.length >= 3 && !platformDomains.includes(baseDomain)) {
     const subdomain = parts[0];
-    // If subdomain is not in excluded list and has at least 2 more parts (domain.tld)
     if (!excludedPrefixes.includes(subdomain.toLowerCase())) {
       return true;
     }
   }
-  
+
   return false;
 }
 
@@ -138,14 +140,16 @@ export function getAppNameFromSubdomain(): string | null {
   
   // Match production domain pattern (appname.domainname.com)
   const excludedPrefixes = ['www', 'dev', 'api', 'admin', 'app', 'apps', 'merojugx'];
+  const platformDomains = ['vercel.app', 'railway.app', 'netlify.app', 'herokuapp.com', 'pages.dev', 'onrender.com'];
   const parts = hostname.split('.');
-  if (parts.length >= 3) {
+  const baseDomain = parts.slice(-2).join('.');
+  if (parts.length >= 3 && !platformDomains.includes(baseDomain)) {
     const subdomain = parts[0].toLowerCase();
     if (!excludedPrefixes.includes(subdomain)) {
       return subdomain;
     }
   }
-  
+
   return null;
 }
 
