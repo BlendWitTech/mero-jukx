@@ -81,9 +81,31 @@ export async function initializeDatabase(): Promise<void> {
       }
     }
 
-    // Seeds are now handled separately via 'npm run seed'
-    console.log('🌱 Database schema initialized (skipping seeds as requested).');
-    console.log('💡 Note: Run "npm run seed" to populate the database with initial and sample data.\n');
+    // Run seeds if packages table is empty
+    if (!hasPackages) {
+      console.log('🌱 Running seeds (packages table is empty)...');
+      try {
+        await seedPackages(AppDataSource);
+        console.log('  ✓ Packages seeded');
+        await seedPermissions(AppDataSource);
+        console.log('  ✓ Permissions seeded');
+        await seedRoles(AppDataSource);
+        console.log('  ✓ Roles seeded');
+        await seedPackageFeatures(AppDataSource);
+        console.log('  ✓ Package features seeded');
+        await seedRoleTemplates(AppDataSource);
+        console.log('  ✓ Role templates seeded');
+        await seedSystemAdminUser(AppDataSource);
+        console.log('  ✓ System admin user seeded');
+        await seedWorkspaceProjectTemplates(AppDataSource);
+        console.log('  ✓ Workspace project templates seeded');
+        console.log('  ✓ All seeds complete.\n');
+      } catch (seedError: any) {
+        console.error('  ⚠️ Seed error (non-fatal):', seedError?.message || seedError);
+      }
+    } else {
+      console.log('🌱 Seeds already applied, skipping.\n');
+    }
 
     await queryRunner.release();
     console.log('✅ Database initialization complete!');
