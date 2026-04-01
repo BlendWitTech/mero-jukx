@@ -8,4 +8,4 @@ cmds = ['cd api && npm install --legacy-peer-deps']
 cmds = ['cd api && ./node_modules/.bin/nest build && ls -la dist/']
 
 [start]
-cmd = 'node api/dist/main.js'
+cmd = 'node api/dist/src/main.js'
