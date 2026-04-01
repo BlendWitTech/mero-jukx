@@ -19,5 +19,17 @@ export const getAllowedOrigins = (configService: ConfigService): (string | RegEx
         ];
     }
 
-    return [frontendUrl];
+    // Support comma-separated list of allowed origins via CORS_ORIGINS env var
+    const corsOrigins = configService.get<string>('CORS_ORIGINS', '');
+    const extraOrigins = corsOrigins
+        ? corsOrigins.split(',').map((o) => o.trim()).filter(Boolean)
+        : [];
+
+    return [
+        frontendUrl,
+        ...extraOrigins,
+        // Allow all Vercel preview deployments for this project
+        /^https:\/\/mero-jukx(-[a-z0-9]+)*\.vercel\.app$/,
+        /^https:\/\/mero-jukx-.*-blendwit-techs-projects\.vercel\.app$/,
+    ];
 };
