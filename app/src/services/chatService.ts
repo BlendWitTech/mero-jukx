@@ -139,8 +139,8 @@ class ChatService {
       // Absolute URL with /api - remove it
       socketUrl = API_URL.replace('/api', '');
     } else {
-      // Fallback
-      socketUrl = 'http://localhost:3000';
+      // Fallback: use API_URL as-is (already a base URL with no /api path)
+      socketUrl = API_URL;
     }
 
     if (import.meta.env.MODE === 'development') {
