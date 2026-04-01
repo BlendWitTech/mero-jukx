@@ -193,23 +193,27 @@ export function buildAppSubdomainUrl(appSlug: string, path: string = '', orgSlug
   const port = window.location.port;
   const env = getEnvironment();
   const currentHostname = window.location.hostname;
-  
+
   // Check if we're using localhost in development
   const isLocalhost = currentHostname === 'localhost' || currentHostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
-  
-  // In development with localhost, use localhost path instead of subdomain
-  if (env === 'development' && isLocalhost && orgSlug) {
+
+  // Check if we're on a deployment platform domain that doesn't support dynamic subdomains
+  const platformDomains = ['vercel.app', 'railway.app', 'netlify.app', 'herokuapp.com', 'pages.dev', 'onrender.com'];
+  const baseDomain = currentHostname.split('.').slice(-2).join('.');
+  const isOnPlatformDomain = platformDomains.includes(baseDomain);
+
+  // Use path-based routing for localhost (dev) or platform domains (vercel.app, etc.)
+  if (((env === 'development' && isLocalhost) || isOnPlatformDomain) && orgSlug) {
     let url = `${protocol}//${currentHostname}`;
     if (port) {
       url += `:${port}`;
     }
     const appPath = path || '';
-    // Use /app/{appSlug} instead of /apps/{appId}
     url += `/org/${orgSlug}/app/${appSlug}${appPath}`;
     return url;
   }
-  
-  // For dev.merojugx.com or production, use subdomain
+
+  // For dev.merojugx.com or production custom domain, use subdomain
   let hostname: string;
   if (env === 'development' || env === 'staging') {
     hostname = `${appSlug}.dev.merojugx.com`;
@@ -218,17 +222,17 @@ export function buildAppSubdomainUrl(appSlug: string, path: string = '', orgSlug
     const productionDomain = getProductionDomain();
     hostname = `${appSlug}.${productionDomain}`;
   }
-  
+
   let url = `${protocol}//${hostname}`;
   // Include port for development
   if (port && (env === 'development' || hostname.includes('dev.merojugx.com'))) {
     url += `:${port}`;
   }
-  
+
   if (path) {
     url += path.startsWith('/') ? path : `/${path}`;
   }
-  
+
   return url;
 }
 
@@ -239,16 +243,17 @@ export function buildAppSubdomainUrl(appSlug: string, path: string = '', orgSlug
 export function redirectToAppSubdomain(appSlug: string, orgSlug: string): void {
   const currentAppName = getAppNameFromSubdomain();
   const { isAuthenticated } = useAuthStore.getState();
-  
-  // If already on the correct subdomain, just navigate to the app
+
+  const env = getEnvironment();
+  const currentHostname = window.location.hostname;
+  const isLocalhost = currentHostname === 'localhost' || currentHostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
+  const platformDomains = ['vercel.app', 'railway.app', 'netlify.app', 'herokuapp.com', 'pages.dev', 'onrender.com'];
+  const baseDomain = currentHostname.split('.').slice(-2).join('.');
+  const usePathRouting = (env === 'development' && isLocalhost) || platformDomains.includes(baseDomain);
+
+  // If already on the correct subdomain/path, just navigate to the app
   if (currentAppName === appSlug) {
-    // Already on correct subdomain, navigate to app
-    const env = getEnvironment();
-    const currentHostname = window.location.hostname;
-    const isLocalhost = currentHostname === 'localhost' || currentHostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
-    
-    if (env === 'development' && isLocalhost) {
-      // For localhost, use path-based routing
+    if (usePathRouting) {
       if (typeof window !== 'undefined' && !window.location.pathname.includes(`/org/${orgSlug}/app/${appSlug}`)) {
         window.location.href = `/org/${orgSlug}/app/${appSlug}`;
       }
@@ -260,41 +265,21 @@ export function redirectToAppSubdomain(appSlug: string, orgSlug: string): void {
     }
     return;
   }
-  
-  // If user is already authenticated, navigate to app subdomain (will show lock screen if needed)
-  // This ensures we don't redirect to login when opening from marketplace/taskbar
+
+  // If user is already authenticated, navigate to app (will show lock screen if needed)
   if (isAuthenticated) {
-    // Build app subdomain URL with app path
-    const env = getEnvironment();
-    const currentHostname = window.location.hostname;
-    const isLocalhost = currentHostname === 'localhost' || currentHostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
-    
-    if (env === 'development' && isLocalhost) {
-      // For localhost, use path-based routing
-      const appUrl = buildAppSubdomainUrl(appSlug, '', orgSlug);
-      window.location.href = appUrl;
-    } else {
-      // For subdomain, navigate to root
-      const appUrl = buildAppSubdomainUrl(appSlug, '/', orgSlug);
-      window.location.href = appUrl;
-    }
+    const appUrl = buildAppSubdomainUrl(appSlug, usePathRouting ? '' : '/', orgSlug);
+    window.location.href = appUrl;
     return;
   }
-  
+
   // If not authenticated, redirect to login with returnUrl
-  // This handles direct access to app subdomain without being logged in
-  const env = getEnvironment();
-  const currentHostname = window.location.hostname;
-  const isLocalhost = currentHostname === 'localhost' || currentHostname === '127.0.0.1' || /^\d+\.\d+\.\d+\.\d+$/.test(currentHostname);
-  
   const returnUrl = encodeURIComponent(buildAppSubdomainUrl(appSlug, '', orgSlug));
   const mainDomainUrl = getMainDomainUrl();
-  
-  if (env === 'development' && isLocalhost) {
-    // Use localhost path for login
+
+  if (usePathRouting) {
     window.location.href = `${mainDomainUrl}/org/${orgSlug}/app/${appSlug}/login?returnUrl=${returnUrl}`;
   } else {
-    // Use app subdomain for login
     const appLoginUrl = buildAppSubdomainUrl(appSlug, '/login', orgSlug);
     window.location.href = appLoginUrl;
   }
