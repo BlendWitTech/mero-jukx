@@ -58,9 +58,6 @@
       "@crm": [
         "./marketplace/organization/mero-crm/src/MeroCrmRouter"
       ],
-      "@social/*": [
-        "./marketplace/shared/mero-social/*"
-      ],
       "@inventory/*": [
         "./marketplace/organization/mero-inventory/*"
       ],

@@ -53,8 +53,7 @@ mero-jugx/
 │       │   ├── mero-khata/       # Simplified accounting
 │       │   └── mero-cms/         # Content management
 │       └── shared/
-│           ├── mero-board/       # Project management
-│           └── mero-social/      # Communication
+│           └── mero-board/       # Project management
 │
 ├── app/                          # React 18 Frontend
 │   ├── src/                      # Core shell
@@ -323,8 +322,7 @@ mero-jugx/
 │       │   ├── mero-khata/       # Simplified accounting
 │       │   └── mero-cms/         # Content management
 │       └── shared/
-│           ├── mero-board/       # Project management
-│           └── mero-social/      # Communication
+│           └── mero-board/       # Project management
 │
 ├── app/                          # React 18 Frontend
 │   ├── src/                      # Core shell, dashboard, admin, tickets, chat

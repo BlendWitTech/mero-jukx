@@ -20,9 +20,8 @@ import React, { Suspense, lazy } from 'react';
 
 // Lazy load app routers
 const MeroBoardRouter = lazy(() => import('@apps/mero-board/MeroBoardRouter'));
-const MeroSaaSKitRouter = lazy(() => import('@apps/mero-saas-kit/MeroSaaSKitRouter'));
+// Mero SaaS Kit and Mero Social removed (chore/remove-social-saas-kit)
 const MeroCrmRouter = lazy(() => import('@crm/MeroCrmRouter'));
-const MeroSocialRouter = lazy(() => import('@apps/mero-social/MeroSocialRouter'));
 const MeroInventoryRouter = lazy(() => import('@inventory/MeroInventoryRouter'));
 const MeroAccountingRouter = lazy(() => import('@accounting/MeroAccountingRouter'));
 const MeroKhataRouter = lazy(() => import('@khata/MeroKhataRouter'));
@@ -350,24 +349,7 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
 
   // Removed subscription check - all organization members can access apps
 
-  // Mero SaaS Kit - Coming Soon (no authentication required)
-  if (app?.slug === 'mero-saas-kit') {
-    return (
-      <>
-        <div className="h-full w-full flex flex-col overflow-hidden" style={{ backgroundColor: theme.colors.background }}>
-          <div className="flex-1 overflow-hidden">
-            <Suspense fallback={
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.primary }} />
-              </div>
-            }>
-              <MeroSaaSKitRouter appId={appIdNum!} />
-            </Suspense>
-          </div>
-        </div>
-      </>
-    );
-  }
+  // Mero SaaS Kit removed (chore/remove-social-saas-kit)
 
   // Show locked screen if no session token or needs re-auth
   if (!hasAppSession || needsReauth) {
@@ -445,33 +427,7 @@ export default function AppViewPage({ appSlug: propAppSlug }: AppViewPageProps =
   }
 
 
-  if (app?.slug === 'mero-social' && hasAppSession) {
-    return (
-      <>
-        <div className="h-full w-full flex flex-col overflow-hidden" style={{ backgroundColor: theme.colors.background }}>
-          <div className="flex-1 overflow-hidden">
-            <Suspense fallback={
-              <div className="flex items-center justify-center h-full">
-                <Loader2 className="w-8 h-8 animate-spin" style={{ color: theme.colors.primary }} />
-              </div>
-            }>
-              <MeroSocialRouter appSlug={appSlug!} />
-            </Suspense>
-          </div>
-        </div>
-        <ConfirmDialog
-          isOpen={showCloseConfirm}
-          onClose={handleCancelClose}
-          onConfirm={handleConfirmClose}
-          title="Close App"
-          message={`Are you sure you want to close "${app.name}"? This will remove the app from the taskbar.`}
-          confirmText="Close"
-          cancelText="Cancel"
-          variant="warning"
-        />
-      </>
-    );
-  }
+  // Mero Social removed (chore/remove-social-saas-kit)
 
   if (app?.slug === 'mero-inventory' && hasAppSession) {
     return (
