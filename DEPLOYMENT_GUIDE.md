@@ -29,7 +29,6 @@ User visits accounting.merojugx.com
 | `mero-hr.merojugx.com` | Vercel | Mero HR app |
 | `mero-board.merojugx.com` | Vercel | Mero Board app |
 | `mero-khata.merojugx.com` | Vercel | Mero Khata app |
-| `mero-social.merojugx.com` | Vercel | Mero Social app |
 | `mero-crm.merojugx.com` | Vercel | Mero CRM app |
 | `mero-cms.merojugx.com` | Vercel | Mero CMS (Coming Soon) |
 | `api.merojugx.com` | Railway | NestJS REST API |
@@ -218,7 +217,6 @@ The subdomain prefix must exactly match the app's database slug:
 | `mero-hr` | `mero-hr` | Mero HR |
 | `mero-board` | `mero-board` | Mero Board |
 | `mero-khata` | `mero-khata` | Mero Khata |
-| `mero-social` | `mero-social` | Mero Social |
 | `mero-crm` | `mero-crm` | Mero CRM |
 | `mero-cms` | `mero-cms` | Mero CMS (Coming Soon) |
 

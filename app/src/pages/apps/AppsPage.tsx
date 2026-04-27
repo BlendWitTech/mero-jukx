@@ -932,33 +932,7 @@ export default function AppsPage() {
                       <Star className={`w-5 h-5 ${favoriteAppIds.includes(selectedApp.id) ? 'fill-current' : ''}`} />
                     </button>
                     {(() => {
-                      // Mero SaaS Kit - Coming Soon (no purchase/subscribe)
-                      if (selectedApp.slug === 'mero-saas-kit') {
-                        return (
-                          <button
-                            onClick={() => {
-                              marketplaceService.recordUsage(selectedApp.id);
-                              const path = slug ? `/org/${slug}/app/${selectedApp.slug}` : `/app/${selectedApp.slug}`;
-                              navigate(path);
-                            }}
-                            className="flex-1 py-3 border rounded-xl font-semibold transition-all flex items-center justify-center gap-2"
-                            style={{
-                              background: `linear-gradient(to right, ${theme.colors.primary}33, ${theme.colors.secondary}33)`,
-                              color: theme.colors.primary,
-                              borderColor: `${theme.colors.primary}80`,
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.primary}4D, ${theme.colors.secondary}4D)`;
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.background = `linear-gradient(to right, ${theme.colors.primary}33, ${theme.colors.secondary}33)`;
-                            }}
-                          >
-                            <Sparkles className="w-5 h-5" />
-                            View Coming Soon
-                          </button>
-                        );
-                      }
+                      // Mero SaaS Kit removed (chore/remove-social-saas-kit)
 
                       const purchased = isPurchased(selectedApp.id);
                       if (!isSubscribed(selectedApp.id) && canSubscribe && !isBranch) {

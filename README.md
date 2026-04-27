@@ -15,7 +15,6 @@ Mero Jugx is a **multi-tenant ERP SaaS platform** for Nepal, bundling CRM, Inven
 | **Mero HR**        | ⚠️ Beta            | Employees, Departments, Attendance, Payroll, Leave, Shifts, Recruitment, Performance, Training, Exit Management |
 | **Mero Khata**     | ⚠️ Beta            | Ledger, Bank Reconciliation, Invoicing, VAT, Reports, WhatsApp Sharing |
 | **Mero CMS**       | ✅ Production Ready | Pages, Posts, Media, Forms, Website Builder, SEO, E-commerce |
-| **Mero Social**    | 🔧 In Progress      | Communication, Channels, Direct Messages, Announcements |
 | **Ticket System**  | 🔧 In Progress      | Ticket creation, assignment, SLA, escalation, reporting |
 | **Chat System**    | 🔧 In Progress      | Direct/group chat, file sharing, notifications, admin chat |
 
@@ -180,7 +179,7 @@ mero-jugx/
 │   ├── src/                # Core: auth, orgs, users, packages, payments
 │   ├── marketplace/        # Per-app modules
 │   │   ├── organization/   # mero-crm, mero-inventory, mero-accounting, mero-hr, mero-khata, mero-cms
-│   │   └── shared/         # mero-board, mero-social
+│   │   └── shared/         # mero-board
 │   └── Dockerfile
 ├── app/                    # React 18 frontend
 │   ├── src/                # Core shell (auth, org switcher, dashboard)

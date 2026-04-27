@@ -38,7 +38,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { SentryService } from './common/services/sentry.service';
 import { MeroBoardModule } from '../marketplace/shared/mero-board/mero-board.module';
 import { MeroCrmModule } from '../marketplace/organization/mero-crm/src/mero-crm.module';
-import { MeroSocialModule } from '../marketplace/shared/mero-social/mero-social.module';
+// Mero Social removed (chore/remove-social-saas-kit)
 import { MeroInventoryModule } from '../marketplace/organization/mero-inventory/mero-inventory.module';
 import { MeroAccountingModule } from '../marketplace/organization/mero-accounting/mero-accounting.module';
 import { MeroKhataModule } from '../marketplace/organization/mero-khata/mero-khata.module';
@@ -108,7 +108,7 @@ import { WorkflowsModule } from './workflows/workflows.module';
     AdminChatModule,
     MeroBoardModule,
     MeroCrmModule,
-    MeroSocialModule,
+    // MeroSocialModule removed (chore/remove-social-saas-kit)
     MeroInventoryModule,
     MeroAccountingModule,
     MeroKhataModule,

@@ -24,7 +24,6 @@ export default defineConfig({
       '@shared': path.resolve(__dirname, '../shared/frontend'),
       '@apps': path.resolve(__dirname, './marketplace/shared'),
       '@crm': path.resolve(__dirname, './marketplace/organization/mero-crm/src'),
-      '@social': path.resolve(__dirname, './marketplace/shared/mero-social'),
       '@inventory': path.resolve(__dirname, './marketplace/organization/mero-inventory'),
       '@accounting': path.resolve(__dirname, './marketplace/organization/mero-accounting'),
       '@khata': path.resolve(__dirname, './marketplace/organization/mero-khata'),
